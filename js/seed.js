@@ -3,11 +3,12 @@
 const N = [
   // positions
   ['standing', 'Standing', 'position'],
-  ['closed-guard', 'Closed Guard', 'position'],
-  ['open-guard', 'Open Guard', 'position'],
-  ['half-guard', 'Half Guard', 'position'],
-  ['butterfly', 'Butterfly Guard', 'position'],
-  ['dlr', 'De La Riva', 'position'],
+  // guards
+  ['closed-guard', 'Closed Guard', 'guard'],
+  ['open-guard', 'Open Guard', 'guard'],
+  ['half-guard', 'Half Guard', 'guard'],
+  ['butterfly', 'Butterfly Guard', 'guard'],
+  ['dlr', 'De La Riva', 'guard'],
   ['open-guard-top', 'Open Guard (Top)', 'position'],
   ['side-top', 'Side Control (Top)', 'position'],
   ['side-bottom', 'Side Control (Bottom)', 'position'],

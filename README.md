@@ -4,7 +4,7 @@ A phone-first web app for organizing your Brazilian Jiu-Jitsu game. Add it to yo
 
 ## Features
 
-- **Library**: every move, grouped **by type** (positions, submissions, sweeps, passes, escapes, takedowns, transitions) or **by position** (each position shows its submissions, sweeps, passes and where it leads). Search covers names, notes, tags and clip titles. You can star favorites.
+- **Library**: every move, grouped **by type** (positions, guards, submissions, sweeps, passes, escapes, takedowns, transitions) or **by position** (each guard and position shows its submissions, sweeps, passes and where it leads). Search covers names, notes, tags and clip titles. You can star favorites.
 - **Mind map**
   - **Web**: the whole game as a spider web. Tap a box and the moves that flow **in** light up blue, the moves that flow **out** light up orange, and everything else fades. Pinch to zoom, drag the background to pan, drag boxes to arrange them. Tap the selected box again to open its details.
   - **Flow**: a focused view with the chosen move in the middle, what flows into it above and what flows out of it below. Tap any box to follow the chain.
@@ -15,7 +15,7 @@ A phone-first web app for organizing your Brazilian Jiu-Jitsu game. Add it to yo
   - **Rolling**: reflections after sparring, covering which school and who you rolled with, how it felt (1–5), what worked, where you struggled or got caught, and a focus for next time. Your latest focus stays pinned at the top.
   - Every move's detail screen lists the journal entries that mention it.
 - **Courses**: track instructionals, split them into chapters with timestamps, tick chapters off and link each one to the moves it teaches.
-- **Backup to iCloud**: one tap saves a backup file to iCloud Drive through the share sheet, and the app reminds you when you have changes that are not backed up yet (daily, every 3 days, weekly, or never).
+- **Backup to iCloud**: one tap saves a backup file to iCloud Drive through the share sheet (always the same file name, so each backup replaces the last), and the app reminds you when you have changes that are not backed up yet (daily, every 3 days, weekly, or never).
 
 ## Put it on your iPhone
 

@@ -6,6 +6,7 @@ const LAYOUT_KEY = 'bjj-mind-map:layout:v1';
 
 export const TYPES = {
   position:   { label: 'Position',   plural: 'Positions',   color: '#8b9cff' },
+  guard:      { label: 'Guard',      plural: 'Guards',      color: '#c084fc' },
   submission: { label: 'Submission', plural: 'Submissions', color: '#ff6b6b' },
   sweep:      { label: 'Sweep',      plural: 'Sweeps',      color: '#3ddc97' },
   pass:       { label: 'Pass',       plural: 'Passes',      color: '#ffb84d' },
@@ -14,6 +15,22 @@ export const TYPES = {
   transition: { label: 'Transition', plural: 'Transitions', color: '#b9b9c9' },
 };
 export const TYPE_KEYS = Object.keys(TYPES);
+// Types that act as places you can be in (shown as cards in Library → By position).
+export const PLACE_TYPES = ['position', 'guard'];
+export const isPlace = type => PLACE_TYPES.includes(type);
+
+// One-time upgrade for data saved before the Guard type existed:
+// bottom-guard positions (e.g. "Closed Guard", "De La Riva") become Guards; "(Top)" positions stay positions.
+function migrate(d) {
+  d.migrations = d.migrations || [];
+  if (!d.migrations.includes('guard-type')) {
+    d.nodes.forEach(n => {
+      if (n.type === 'position' && /guard|de la riva|\bdlr\b|x-guard|lasso|spider|worm/i.test(n.name) && !/\btop\b|passing/i.test(n.name)) n.type = 'guard';
+    });
+    d.migrations.push('guard-type');
+  }
+  return d;
+}
 
 export function uid() {
   if (crypto.randomUUID) return crypto.randomUUID().slice(0, 12);
@@ -59,6 +76,7 @@ function normalize(d) {
       nodeIds: (ch.nodeIds || []).filter(id => ids.has(id)),
     })),
   }));
+  out.migrations = Array.isArray(d.migrations) ? d.migrations : [];
   out.journal = (d.journal || []).map(j => ({
     id: j.id || uid(),
     kind: j.kind === 'roll' ? 'roll' : 'lesson',
@@ -86,7 +104,7 @@ export function today() {
 export function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    data = raw ? normalize(JSON.parse(raw)) : normalize(makeSeed());
+    data = raw ? migrate(normalize(JSON.parse(raw))) : migrate(normalize(makeSeed()));
   } catch {
     data = normalize(makeSeed());
   }
@@ -258,12 +276,12 @@ export function exportJSON() {
 export function importJSON(text) {
   const parsed = JSON.parse(text);
   if (!parsed || !Array.isArray(parsed.nodes)) throw new Error('Not a BJJ Mind Map backup file');
-  data = normalize(parsed);
+  data = migrate(normalize(parsed));
   saveLayout(parsed.layout && typeof parsed.layout === 'object' ? parsed.layout : {});
   changed();
 }
 export function resetTo(kind) {
-  data = normalize(kind === 'sample' ? makeSeed() : blank());
+  data = migrate(normalize(kind === 'sample' ? makeSeed() : blank()));
   saveLayout({});
   changed();
 }

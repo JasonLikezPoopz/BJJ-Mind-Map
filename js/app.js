@@ -1,5 +1,5 @@
 import * as S from './store.js';
-import { TYPES, TYPE_KEYS } from './store.js';
+import { TYPES, TYPE_KEYS, isPlace } from './store.js';
 import { GraphView } from './graph.js';
 import { SOURCES, detectSource, parseTime, formatTime, youtubeInfo, clipOpenUrl, normalizeUrl } from './clips.js';
 
@@ -208,9 +208,10 @@ function renderLibList() {
     }
   } else {
     const byId = new Map(nodes.map(n => [n.id, n]));
-    const order = ['submission', 'sweep', 'pass', 'escape', 'takedown', 'transition', 'position'];
-    const label = k => (k === 'position' ? 'Leads to' : TYPES[k].plural);
-    const positions = nodes.filter(n => n.type === 'position');
+    const order = ['submission', 'sweep', 'pass', 'escape', 'takedown', 'transition', 'guard', 'position'];
+    const label = k => (k === 'position' ? 'Leads to' : k === 'guard' ? 'Guards' : TYPES[k].plural);
+    // Guards first, then other positions
+    const positions = nodes.filter(n => isPlace(n.type)).sort((a, b) => (a.type === 'guard' ? 0 : 1) - (b.type === 'guard' ? 0 : 1) || a.name.localeCompare(b.name));
     for (const p of positions) {
       const outs = S.outgoing(p.id).map(e => ({ e, n: byId.get(e.to) }));
       if (q && !matches(p, q) && !outs.some(o => matches(o.n, q))) continue;
@@ -222,13 +223,13 @@ function renderLibList() {
         </div></div>`;
       }).join('');
       html += `<div class="pos-card">
-        <button class="pos-head" data-id="${p.id}">${dot('position')}<span class="row-main"><span class="row-title">${esc(p.name)}${p.favorite ? ' <span class="fav">★</span>' : ''}</span>
+        <button class="pos-head" data-id="${p.id}">${dot(p.type)}<span class="row-main"><span class="row-title">${esc(p.name)}${p.favorite ? ' <span class="fav">★</span>' : ''}</span>
         <span class="row-sub">${outs.length} option${outs.length === 1 ? '' : 's'}${p.clips.length ? ` · ▶ ${p.clips.length}` : ''}</span></span>${I.chev}</button>
         ${groups || '<p class="empty-small">No options yet.</p>'}
         <button class="link-btn" data-add-from="${p.id}">+ Add option</button>
       </div>`;
     }
-    const orphans = nodes.filter(n => n.type !== 'position' && matches(n, q) && !S.incoming(n.id).some(e => byId.get(e.from)?.type === 'position'));
+    const orphans = nodes.filter(n => !isPlace(n.type) && matches(n, q) && !S.incoming(n.id).some(e => isPlace(byId.get(e.from)?.type)));
     if (orphans.length) {
       html += `<h4 class="group-head">Not reached from a position<span class="count">${orphans.length}</span></h4>
         <div class="chip-wrap loose">${orphans.map(n => `<button class="mchip" data-id="${n.id}" style="--c:${color(n.type)}">${esc(n.name)}</button>`).join('')}</div>`;
@@ -537,7 +538,7 @@ function renderMap() {
 function setMapMode(mode) {
   ui.mapMode = mode; savePrefs();
   if (mode === 'flow' && !graph.selected) {
-    const first = S.db().nodes.find(n => n.type === 'position') || S.db().nodes[0];
+    const first = S.db().nodes.find(n => isPlace(n.type)) || S.db().nodes[0];
     graph.selected = first?.id || null;
     ui.mapSelected = graph.selected;
   }
@@ -922,7 +923,7 @@ function renderMore() {
         <select class="input backup-every">
           ${[[1, 'Every day'], [3, 'Every 3 days'], [7, 'Every week'], [0, 'Never']].map(([v, l]) => `<option value="${v}" ${backup.state.every === v ? 'selected' : ''}>${l}</option>`).join('')}
         </select></label>
-      <p class="hint">Tap <b>Back up now</b> → <b>Save to Files</b> → <b>iCloud Drive</b> and pick a folder (e.g. “BJJ”). Your iPhone remembers the folder, so after the first time it’s two taps. To restore, tap <b>Restore</b> and pick the newest file from iCloud Drive.</p>
+      <p class="hint">Tap <b>Back up now</b> → <b>Save to Files</b> → <b>iCloud Drive</b> and pick a folder (e.g. “BJJ”). The backup always has the same name, so next time just tap <b>Save</b> → <b>Replace</b> to overwrite the old one. To restore, tap <b>Restore</b> and pick “BJJ Mind Map Backup” from iCloud Drive.</p>
       <input type="file" accept="application/json,.json" hidden class="import-file">
     </section>
 
@@ -1015,7 +1016,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 async function exportBackup() {
   const json = S.exportJSON();
-  const name = `bjj-mind-map-${new Date().toISOString().slice(0, 10)}.json`;
+  // Always the same file name, so saving to the same iCloud folder replaces the previous backup.
+  const name = 'BJJ Mind Map Backup.json';
   const fileObj = new File([json], name, { type: 'application/json' });
   if (navigator.canShare?.({ files: [fileObj] })) {
     try {
