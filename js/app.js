@@ -250,7 +250,7 @@ function flowSection(dir, edges) {
     const other = S.node(isIn ? e.from : e.to);
     return `<div class="flow-row">
       <button class="flow-main" data-act="goto" data-id="${other.id}">${dot(other.type)}
-        <span class="row-main"><span class="row-title">${esc(other.name)}</span>${e.label ? `<span class="row-sub italic"><b class="why-tag">Why</b> ${esc(e.label)}</span>` : ''}${e.how ? `<span class="row-sub how-line"><b class="how-tag">How</b> ${esc(e.how)}</span>` : ''}</span>
+        <span class="row-main"><span class="row-title">${esc(other.name)}</span>${e.label ? `<span class="row-sub italic why-line"><b class="why-tag">Why</b> ${esc(e.label)}</span>` : ''}${e.how ? `<span class="row-sub how-line"><b class="how-tag">How</b> ${esc(e.how)}</span>` : ''}</span>
         <span class="type-mini" style="--c:${color(other.type)}">${TYPES[other.type].label}</span></button>
       <button class="icon-btn sm" data-act="edge" data-edge="${e.id}" aria-label="Connection options">${I.dots}</button>
     </div>`;

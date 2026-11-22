@@ -33,10 +33,26 @@ function rng(seed) {
   };
 }
 
+const SUB_LINE = 14;
+// Break text into lines that fit `max` pixels (long single words are cut with an ellipsis).
+export function wrapText(s, font, max) {
+  const lines = [];
+  let line = '';
+  for (const word of String(s).split(/\s+/).filter(Boolean)) {
+    const tryLine = line ? line + ' ' + word : word;
+    if (textWidth(tryLine, font) <= max) { line = tryLine; continue; }
+    if (line) lines.push(line);
+    line = textWidth(word, font) <= max ? word : truncate(word, font, max);
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
 export function nodeSize(node, sub, maxW = MAX_W) {
   const tw = Math.min(textWidth(node.name, TITLE_FONT), maxW - 34);
-  const sw = sub ? Math.min(textWidth(sub, SUB_FONT), maxW - 34) : 0;
-  return { w: Math.max(84, Math.max(tw, sw) + 34), h: sub ? 50 : 36 };
+  const lines = sub ? wrapText(sub, SUB_FONT, maxW - 34) : [];
+  const sw = lines.reduce((m, l) => Math.max(m, textWidth(l, SUB_FONT)), 0);
+  return { w: Math.max(84, Math.max(tw, sw) + 34), h: 36 + lines.length * SUB_LINE, lines };
 }
 
 // Fruchterman–Reingold force layout followed by box-collision cleanup.
@@ -242,21 +258,24 @@ export class GraphView {
       }
       return { parentEdge, children };
     };
-    const INDENT = 26, ROW = 58;
+    const INDENT = 26, GAP = 12;
     const nodes = [], sEdges = [];
     const place = (key, id, left, y, sub, center) => {
       const { w } = nodeSize(byId.get(id), sub, MAX_W);
       nodes.push({ key, id, x: left + w / 2, y, sub, center });
     };
+    const heightOf = (id, sub) => nodeSize(byId.get(id), sub, MAX_W).h;
     place('c:' + c, c, 0, 0, '', true);
+    const centerH = heightOf(c, '');
 
     // Downstream: pre-order, children below their parent.
     const down = tree(outAdj, 'to');
-    let y = 0, downCount = 0;
+    let y = 0, prevH = centerH, downCount = 0;
     const walkDown = (u, depth) => {
       for (const v of down.children.get(u) || []) {
-        y += ROW; downCount++;
-        place('out:' + v, v, depth * INDENT, y, down.parentEdge.get(v).label);
+        const sub = down.parentEdge.get(v).label, h = heightOf(v, sub);
+        y += prevH / 2 + GAP + h / 2; prevH = h; downCount++;
+        place('out:' + v, v, depth * INDENT, y, sub);
         sEdges.push({ from: u === c ? 'c:' + c : 'out:' + u, to: 'out:' + v, kind: 'out', route: 'tree-out' });
         walkDown(v, depth + 1);
       }
@@ -270,10 +289,15 @@ export class GraphView {
       for (const v of up.children.get(u) || []) { walkUp(v, depth + 1); upList.push({ v, u, depth }); }
     };
     walkUp(c, 1);
-    upList.forEach(({ v, u, depth }, i) => {
-      place('in:' + v, v, depth * INDENT, -(upList.length - i) * ROW, up.parentEdge.get(v).label);
+    // Stack upward from the centre, nearest first.
+    let upY = 0, upPrevH = centerH;
+    for (let i = upList.length - 1; i >= 0; i--) {
+      const { v, u, depth } = upList[i];
+      const sub = up.parentEdge.get(v).label, h = heightOf(v, sub);
+      upY -= upPrevH / 2 + GAP + h / 2; upPrevH = h;
+      place('in:' + v, v, depth * INDENT, upY, sub);
       sEdges.push({ from: 'in:' + v, to: u === c ? 'c:' + c : 'in:' + u, kind: 'in', route: 'tree-in' });
-    });
+    }
     this.chainCounts = { up: upList.length, down: downCount };
     return { nodes, edges: sEdges, headers: [] };
   }
@@ -287,27 +311,34 @@ export class GraphView {
     const colW = width < 420 ? Math.floor((width - 12) / 2) : 210;
     const cols = Math.max(1, Math.min(5, Math.floor((width - 12) / colW)));
     this.flowColW = colW;
-    const maxW = Math.min(MAX_W, colW - 22);
-    const rowH = 62, gap = 120;
+    const maxW = this.flowMaxW = Math.min(MAX_W, colW - 22);
+    const gap = 120, firstEdge = 95, rowGap = 12;
     const nodes = [], sEdges = [], headers = [];
     // Tree / bracket layout: each column has a rail on its left; every move branches off it.
+    // Rows are as tall as their tallest box, so long "why" notes are shown in full.
     const grid = (items, prefix, dir) => {
-      const usedCols = Math.min(cols, items.length);
-      items.forEach((it, i) => {
-        const row = Math.floor(i / usedCols), col = i % usedCols;
-        const colLeft = (col - usedCols / 2) * colW;
-        const { w } = nodeSize(it.n, it.e.label, maxW);
-        nodes.push({ key: prefix + it.n.id, id: it.n.id, x: colLeft + 18 + w / 2, y: dir * (gap + row * rowH), sub: it.e.label });
-      });
-      return Math.ceil(items.length / Math.max(1, usedCols));
+      const usedCols = Math.max(1, Math.min(cols, items.length));
+      let edge = firstEdge; // distance from the centre to the near edge of the current row
+      let farEdge = firstEdge;
+      for (let r = 0; r * usedCols < items.length; r++) {
+        const row = items.slice(r * usedCols, (r + 1) * usedCols).map(it => ({ it, size: nodeSize(it.n, it.e.label, maxW) }));
+        const rowH = Math.max(...row.map(x => x.size.h));
+        row.forEach(({ it, size }, col) => {
+          const colLeft = (col - usedCols / 2) * colW;
+          nodes.push({ key: prefix + it.n.id, id: it.n.id, x: colLeft + 18 + size.w / 2, y: dir * (edge + rowH / 2), sub: it.e.label });
+        });
+        farEdge = edge + rowH;
+        edge = farEdge + rowGap;
+      }
+      return farEdge;
     };
-    const insRows = grid(ins, 'in:', -1);
+    const insTop = grid(ins, 'in:', -1);
     grid(outs, 'out:', 1);
     nodes.push({ key: 'c:' + c, id: c, x: 0, y: 0, center: true });
     const barIn = -gap / 2 - 4, barOut = gap / 2 + 4;
     ins.forEach(it => sEdges.push({ from: 'in:' + it.n.id, to: 'c:' + c, kind: 'in', route: 'in', bar: barIn }));
     outs.forEach(it => sEdges.push({ from: 'c:' + c, to: 'out:' + it.n.id, kind: 'out', route: 'out', bar: barOut }));
-    headers.push({ text: ins.length ? `FLOWS IN FROM · ${ins.length}` : 'NOTHING FLOWS IN YET', y: ins.length ? -gap - (insRows - 1) * rowH - 46 : barIn, kind: 'in' });
+    headers.push({ text: ins.length ? `FLOWS IN FROM · ${ins.length}` : 'NOTHING FLOWS IN YET', y: ins.length ? -insTop - 21 : barIn, kind: 'in' });
     headers.push({ text: outs.length ? `FLOWS OUT TO · ${outs.length}` : 'NOTHING FLOWS OUT YET', y: barOut, kind: 'out' });
     return { nodes, edges: sEdges, headers };
   }
@@ -372,17 +403,18 @@ export class GraphView {
 
   makeNode(n, sn, start) {
     const sub = sn.sub || '';
-    const { w, h } = nodeSize(n, sub, this.mode === 'flow' && !sn.center ? Math.min(MAX_W, (this.flowColW || MAX_W) - 12) : MAX_W);
+    const { w, h, lines } = nodeSize(n, sub, this.mode === 'flow' && !sn.center ? this.flowMaxW || MAX_W : MAX_W);
+    const titleY = sub ? -h / 2 + 18 : 0;
     const color = TYPES[n.type].color;
     const g = el('g', { class: 'node' + (sn.center ? ' center' : ''), 'data-key': sn.key, 'data-id': n.id, style: `--c:${color}` }, this.gNodes);
     el('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: 11, class: 'node-box' }, g);
-    el('circle', { cx: -w / 2 + 13, cy: sub ? -7 : 0, r: 4.5, class: 'node-dot' }, g);
-    const t = el('text', { x: -w / 2 + 24, y: sub ? -7 : 0, class: 'node-title', 'dominant-baseline': 'central' }, g);
+    el('circle', { cx: -w / 2 + 13, cy: titleY, r: 4.5, class: 'node-dot' }, g);
+    const t = el('text', { x: -w / 2 + 24, y: titleY, class: 'node-title', 'dominant-baseline': 'central' }, g);
     t.textContent = truncate(n.name, TITLE_FONT, w - 34);
-    if (sub) {
-      const s = el('text', { x: -w / 2 + 24, y: 11, class: 'node-sub', 'dominant-baseline': 'central' }, g);
-      s.textContent = truncate(sub, SUB_FONT, w - 34);
-    }
+    lines.forEach((line, i) => {
+      const s = el('text', { x: -w / 2 + 24, y: -h / 2 + 36 + i * SUB_LINE, class: 'node-sub', 'dominant-baseline': 'central' }, g);
+      s.textContent = line;
+    });
     if (n.clips?.length) {
       el('circle', { cx: w / 2 - 2, cy: -h / 2 + 2, r: 6, class: 'node-badge' }, g);
     }
