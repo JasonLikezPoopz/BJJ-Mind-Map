@@ -412,8 +412,9 @@ function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate
       const label = withLabel ? $('.pk-label', body).value.trim() : '';
       const pick = e.target.closest('[data-pick]');
       const create = e.target.closest('[data-create]');
-      if (pick) { sheet.close(); onPick(pick.dataset.pick, label); }
-      if (create) { const n = S.addNode({ name: q.value.trim(), type: create.dataset.create }); sheet.close(); onPick(n.id, label); }
+      // Save first, then close: closing refreshes the screen underneath, so it shows the new link right away.
+      if (pick) { onPick(pick.dataset.pick, label); sheet.close(); }
+      if (create) { const n = S.addNode({ name: q.value.trim(), type: create.dataset.create }); onPick(n.id, label); sheet.close(); }
     };
   }, { className: 'tall' });
 }
