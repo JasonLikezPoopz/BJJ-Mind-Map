@@ -48,11 +48,16 @@ export function wrapText(s, font, max) {
   return lines;
 }
 
+const TITLE_LINE = 16;
+// Box size for a move: the full name and the full "why" note, each wrapped to fit.
 export function nodeSize(node, sub, maxW = MAX_W) {
-  const tw = Math.min(textWidth(node.name, TITLE_FONT), maxW - 34);
+  const titleLines = wrapText(node.name, TITLE_FONT, maxW - 34);
+  if (!titleLines.length) titleLines.push('');
   const lines = sub ? wrapText(sub, SUB_FONT, maxW - 34) : [];
-  const sw = lines.reduce((m, l) => Math.max(m, textWidth(l, SUB_FONT)), 0);
-  return { w: Math.max(84, Math.max(tw, sw) + 34), h: 36 + lines.length * SUB_LINE, lines };
+  const widest = (arr, font) => arr.reduce((m, l) => Math.max(m, textWidth(l, font)), 0);
+  const w = Math.max(84, Math.max(widest(titleLines, TITLE_FONT), widest(lines, SUB_FONT)) + 34);
+  const h = 36 + (titleLines.length - 1) * TITLE_LINE + lines.length * SUB_LINE;
+  return { w, h, lines, titleLines };
 }
 
 // Fruchterman–Reingold force layout followed by box-collision cleanup.
@@ -403,16 +408,19 @@ export class GraphView {
 
   makeNode(n, sn, start) {
     const sub = sn.sub || '';
-    const { w, h, lines } = nodeSize(n, sub, this.mode === 'flow' && !sn.center ? this.flowMaxW || MAX_W : MAX_W);
-    const titleY = sub ? -h / 2 + 18 : 0;
+    const { w, h, lines, titleLines } = nodeSize(n, sub, this.mode === 'flow' && !sn.center ? this.flowMaxW || MAX_W : MAX_W);
+    const titleY = -h / 2 + 18; // first line of the name
+    const subTop = -h / 2 + 36 + (titleLines.length - 1) * TITLE_LINE;
     const color = TYPES[n.type].color;
     const g = el('g', { class: 'node' + (sn.center ? ' center' : ''), 'data-key': sn.key, 'data-id': n.id, style: `--c:${color}` }, this.gNodes);
     el('rect', { x: -w / 2, y: -h / 2, width: w, height: h, rx: 11, class: 'node-box' }, g);
     el('circle', { cx: -w / 2 + 13, cy: titleY, r: 4.5, class: 'node-dot' }, g);
-    const t = el('text', { x: -w / 2 + 24, y: titleY, class: 'node-title', 'dominant-baseline': 'central' }, g);
-    t.textContent = truncate(n.name, TITLE_FONT, w - 34);
+    titleLines.forEach((line, i) => {
+      const t = el('text', { x: -w / 2 + 24, y: titleY + i * TITLE_LINE, class: 'node-title', 'dominant-baseline': 'central' }, g);
+      t.textContent = line;
+    });
     lines.forEach((line, i) => {
-      const s = el('text', { x: -w / 2 + 24, y: -h / 2 + 36 + i * SUB_LINE, class: 'node-sub', 'dominant-baseline': 'central' }, g);
+      const s = el('text', { x: -w / 2 + 24, y: subTop + i * SUB_LINE, class: 'node-sub', 'dominant-baseline': 'central' }, g);
       s.textContent = line;
     });
     if (n.clips?.length) {
