@@ -65,6 +65,7 @@ function normalize(d) {
     date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : today(),
     title: j.title || '',
     coach: j.coach || '',
+    school: j.school || '',
     body: j.body || '',
     partner: j.partner || '',
     worked: j.worked || '',
@@ -229,7 +230,7 @@ export function journalSorted(kind) {
     .sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
 }
 export function addEntry(kind, patch = {}) {
-  const j = { id: uid(), kind, date: today(), title: '', coach: '', body: '', partner: '', worked: '', struggled: '', nextFocus: '', feel: 0, nodeIds: [], created: Date.now(), ...patch };
+  const j = { id: uid(), kind, date: today(), title: '', coach: '', school: '', body: '', partner: '', worked: '', struggled: '', nextFocus: '', feel: 0, nodeIds: [], created: Date.now(), ...patch };
   data.journal.push(j);
   changed();
   return j;
@@ -241,6 +242,12 @@ export function updateEntry(id, patch) {
 export function deleteEntry(id) {
   data.journal = data.journal.filter(j => j.id !== id);
   changed();
+}
+// Schools you've logged, most recently used first (for autocomplete and as the default for new entries).
+export function schools() {
+  const seen = new Set();
+  journalSorted().forEach(j => { const s = j.school.trim(); if (s) seen.add(s); });
+  return [...seen];
 }
 export const journalForNode = nodeId => journalSorted().filter(j => j.nodeIds.includes(nodeId));
 

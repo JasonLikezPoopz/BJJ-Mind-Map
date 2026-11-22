@@ -106,12 +106,12 @@ export function makeSeed() {
     edges: E.map(([from, to, label = ''], i) => ({ id: 'e' + i, from, to, label })),
     journal: [
       {
-        id: 'sample-lesson', kind: 'lesson', date: isoDaysAgo(2), title: 'Sample: Armbar from closed guard', coach: 'Example coach',
+        id: 'sample-lesson', kind: 'lesson', date: isoDaysAgo(2), title: 'Sample: Armbar from closed guard', coach: 'Example coach', school: 'Example Academy',
         body: 'Break posture first — pull them down before swinging the leg.\nPinch knees together and lift the hips; thumb up on their wrist.\nIf they stack, switch to the triangle.',
         nodeIds: ['armbar', 'closed-guard', 'triangle'], created: now - 2,
       },
       {
-        id: 'sample-roll', kind: 'roll', date: isoDaysAgo(1), title: 'Sample: Open mat', partner: 'Training partner',
+        id: 'sample-roll', kind: 'roll', date: isoDaysAgo(1), title: 'Sample: Open mat', partner: 'Training partner', school: 'Example Academy',
         worked: 'Hit the hip bump twice when they posted up.', struggled: 'Kept getting stuck under side control — framed too late.',
         nextFocus: 'Frame early from bottom side control and recover guard.', feel: 4,
         nodeIds: ['hip-bump', 'side-bottom', 'frame-reguard'], created: now - 1,

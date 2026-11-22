@@ -744,7 +744,7 @@ const JKIND = {
 const parseDate = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
 const fmtDate = iso => parseDate(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 const entryTitle = j => j.title.trim() || (j.kind === 'lesson' ? 'Lesson' : j.partner ? `Rolls with ${j.partner}` : 'Rolling session');
-const entryText = j => [j.title, j.coach, j.body, j.partner, j.worked, j.struggled, j.nextFocus, ...j.nodeIds.map(id => S.node(id)?.name || '')].join(' ').toLowerCase();
+const entryText = j => [j.title, j.coach, j.school, j.body, j.partner, j.worked, j.struggled, j.nextFocus, ...j.nodeIds.map(id => S.node(id)?.name || '')].join(' ').toLowerCase();
 const feelDots = f => f ? `<span class="feel" aria-label="Felt ${f} of 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= f ? 'on' : ''}"></i>`).join('')}</span>` : '';
 
 function renderJournal() {
@@ -796,8 +796,9 @@ function renderJournalList() {
       : [j.worked.trim() ? `<p class="j-line good"><b>✓</b>${esc(j.worked)}</p>` : '', j.struggled.trim() ? `<p class="j-line bad"><b>✗</b>${esc(j.struggled)}</p>` : ''].join('');
     const moves = j.nodeIds.map(id => S.node(id)).filter(Boolean);
     html += `<button class="j-card" data-entry="${j.id}">
-      <div class="j-top"><span class="j-date">${fmtDate(j.date)}</span>${j.kind === 'lesson' && j.coach ? `<span class="row-sub">· ${esc(j.coach)}</span>` : ''}${j.kind === 'roll' && j.partner && j.title ? `<span class="row-sub">· ${esc(j.partner)}</span>` : ''}<span class="spacer"></span>${feelDots(j.feel)}</div>
+      <div class="j-top"><span class="j-date">${fmtDate(j.date)}</span>${j.school ? `<span class="j-school">· ${esc(j.school)}</span>` : ''}<span class="spacer"></span>${feelDots(j.feel)}</div>
       <div class="j-title">${esc(entryTitle(j))}</div>
+      ${j.kind === 'lesson' && j.coach ? `<div class="row-sub">with ${esc(j.coach)}</div>` : ''}${j.kind === 'roll' && j.partner && j.title ? `<div class="row-sub">with ${esc(j.partner)}</div>` : ''}
       ${preview}
       ${moves.length ? `<div class="chip-wrap j-moves">${moves.map(n => `<span class="mchip tiny" style="--c:${color(n.type)}">${esc(n.name)}</span>`).join('')}</div>` : ''}
     </button>`;
@@ -806,7 +807,8 @@ function renderJournalList() {
 }
 
 function newEntry(kind) {
-  const j = S.addEntry(kind);
+  // New entries default to the school you logged most recently.
+  const j = S.addEntry(kind, { school: S.schools()[0] || '' });
   openEntry(j.id, true);
 }
 
@@ -827,6 +829,8 @@ function openEntry(id, isNew) {
         <label class="field" style="width:150px"><span>Date</span><input class="input" type="date" data-f="date" value="${esc(j.date)}"></label>
         <label class="field grow"><span>${lesson ? 'Coach' : 'Partner(s)'}</span><input class="input" data-f="${lesson ? 'coach' : 'partner'}" value="${esc(lesson ? j.coach : j.partner)}" placeholder="${lesson ? 'Who taught it' : 'Who you rolled with'}" autocomplete="off"></label>
       </div>
+      <label class="field"><span>School</span><input class="input" data-f="school" list="schoolList" value="${esc(j.school)}" placeholder="Which gym / academy" autocomplete="off"></label>
+      <datalist id="schoolList">${S.schools().map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist>
       <label class="field"><span>${lesson ? 'Topic' : 'Session'}</span><input class="input" data-f="title" value="${esc(j.title)}" placeholder="${lesson ? 'e.g. Knee cut pass vs. half guard' : 'e.g. Tuesday open mat'}" autocomplete="off"></label>
       ${lesson ? `
         <label class="field"><span>What I learned</span><textarea data-f="body" rows="7" placeholder="Key details, steps, grips, common mistakes, what clicked…">${esc(j.body)}</textarea></label>

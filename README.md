@@ -11,8 +11,8 @@ A phone-first web app for organizing your Brazilian Jiu-Jitsu game. Add it to yo
 - **Move details**: flows in and out (each connection can carry a "when / how" note such as *they posture up*), notes, clips, and the course chapters that cover the move.
 - **Clips**: paste a YouTube, BJJ Fanatics, Submeta or any other link, with an optional timestamp. YouTube clips play inside the app starting at the timestamp. BJJ Fanatics and Submeta don't allow embedding, so those open in their own site or app.
 - **Journal**, in two sections:
-  - **Lessons**: what you learned in class (date, coach, topic, notes), linked to the moves it covered.
-  - **Rolling**: reflections after sparring, covering who you rolled with, how it felt (1–5), what worked, where you struggled or got caught, and a focus for next time. Your latest focus stays pinned at the top.
+  - **Lessons**: what you learned in class (date, school, coach, topic, notes), linked to the moves it covered.
+  - **Rolling**: reflections after sparring, covering which school and who you rolled with, how it felt (1–5), what worked, where you struggled or got caught, and a focus for next time. Your latest focus stays pinned at the top.
   - Every move's detail screen lists the journal entries that mention it.
 - **Courses**: track instructionals, split them into chapters with timestamps, tick chapters off and link each one to the moves it teaches.
 - **Backup**: export and import a JSON file from the **More** tab.
