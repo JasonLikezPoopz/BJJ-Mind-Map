@@ -179,7 +179,7 @@ export class GraphView {
 
     const svg = this.svg = el('svg', { class: 'graph' }, container);
     const defs = el('defs', {}, svg);
-    for (const kind of ['default', 'in', 'out']) {
+    for (const kind of ['default', 'in', 'out', 'path']) {
       const m = el('marker', { id: `arrow-${kind}`, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse', markerUnits: 'userSpaceOnUse' }, defs);
       el('path', { d: 'M0,0 L10,5 L0,10 z', class: `arrowhead ${kind}` }, m);
     }
@@ -478,6 +478,29 @@ export class GraphView {
       }
       return;
     }
+    this.gNodes.querySelectorAll('.path-num').forEach(x => x.remove());
+    // A saved path is being shown (and no box is selected): trace it in gold, number the steps, fade the rest.
+    if (!s && this.path) {
+      const { steps, edges: pathEdges } = this.path;
+      for (const e of this.edgeEls) e.path.setAttribute('class', 'edge ' + (pathEdges.has(e.from + '>' + e.to) ? 'path' : 'dim'));
+      this.edgeEls.filter(e => pathEdges.has(e.from + '>' + e.to)).forEach(e => this.gEdges.appendChild(e.path));
+      for (const [key, item] of this.els) {
+        const on = steps.includes(key);
+        item.g.classList.remove('sel', 'in', 'out');
+        item.g.classList.toggle('path', on);
+        item.g.classList.toggle('dim', !on);
+        if (!on) continue;
+        const nums = steps.map((id, i) => (id === key ? i + 1 : 0)).filter(Boolean).join(',');
+        const r = Math.max(9, 4 + nums.length * 3.5);
+        const badge = el('g', { class: 'path-num', transform: `translate(${-item.w / 2},${-item.h / 2})` }, item.g);
+        el('rect', { x: -r, y: -9, width: r * 2, height: 18, rx: 9 }, badge);
+        const t = el('text', { x: 0, y: 0, 'text-anchor': 'middle', 'dominant-baseline': 'central' }, badge);
+        t.textContent = nums;
+        this.gNodes.appendChild(item.g);
+      }
+      return;
+    }
+    for (const item of this.els.values()) item.g.classList.remove('path');
     const ins = new Set(), outs = new Set();
     for (const e of this.edgeEls) {
       let cls = 'edge';
@@ -498,6 +521,29 @@ export class GraphView {
       c.toggle('dim', !!s && key !== s && !ins.has(key) && !outs.has(key));
       if (key === s) this.gNodes.appendChild(item.g);
     }
+  }
+
+  // Show a saved path on the web (steps = ordered move ids), or pass null to clear it.
+  showPath(steps) {
+    this.path = steps && steps.length ? { steps, edges: new Set(steps.slice(1).map((id, i) => steps[i] + '>' + id)) } : null;
+    this.selected = null;
+    if (this.mode !== 'web') { this.mode = 'web'; this.rebuild({ animate: false }); }
+    this.applyHighlight();
+    if (this.path) this.fitTo(steps);
+  }
+
+  // Zoom to fit just these boxes.
+  fitTo(keys) {
+    const items = keys.map(k => this.els.get(k)).filter(Boolean);
+    const W = this.svg.clientWidth, H = this.svg.clientHeight - this.bottomInset - this.topInset;
+    if (!items.length || !W || !H) return;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    items.forEach(it => { x0 = Math.min(x0, it.x - it.w / 2); x1 = Math.max(x1, it.x + it.w / 2); y0 = Math.min(y0, it.y - it.h / 2); y1 = Math.max(y1, it.y + it.h / 2); });
+    const pad = 28;
+    this.scale = Math.max(0.2, Math.min(1.1, (W - pad * 2) / (x1 - x0), (H - pad * 2) / (y1 - y0)));
+    this.tx = W / 2 - ((x0 + x1) / 2) * this.scale;
+    this.ty = this.topInset + H / 2 - ((y0 + y1) / 2) * this.scale;
+    this.applyView();
   }
 
   // ---------- camera ----------

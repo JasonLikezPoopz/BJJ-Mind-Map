@@ -105,7 +105,10 @@ function setView(v) {
   if (v === 'courses') actions.innerHTML = `<button class="icon-btn accent" id="newCourse" aria-label="New course">${I.plus}</button>`;
   if (v === 'journal') actions.innerHTML = `<button class="icon-btn accent" id="newEntry" aria-label="New journal entry">${I.plus}</button>`;
   $('#newEntry')?.addEventListener('click', () => newEntry(ui.journalKind));
-  $('#newMove')?.addEventListener('click', () => editNode(null, n => { if (ui.view === 'map') { mapSelect(n.id, true); } openNode(n.id); }));
+  $('#newMove')?.addEventListener('click', () => {
+    if (ui.view === 'library' && ui.libMode === 'paths') return newPath();
+    editNode(null, n => { if (ui.view === 'map') { mapSelect(n.id, true); } openNode(n.id); });
+  });
   $('#newCourse')?.addEventListener('click', () => editCourse(null));
   if (typeof updateBackupBar === 'function' && backupReady) updateBackupBar();
   render();
@@ -123,7 +126,11 @@ S.onChange(() => {
   else if (ui.view === 'courses') renderCourses();
   else if (ui.view === 'journal') renderJournalList();
   else if (ui.view === 'more') renderMore();
-  else if (ui.view === 'map' && graph) { graph.rebuild({ animate: true }); updateMapCard(); }
+  else if (ui.view === 'map' && graph) {
+    const sp = ui.mapPath && S.path(ui.mapPath);
+    if (graph.path) graph.path = sp && sp.steps.length ? { steps: sp.steps, edges: new Set(sp.steps.slice(1).map((x, i) => sp.steps[i] + '>' + x)) } : null;
+    graph.rebuild({ animate: true }); updateMapCard();
+  }
 });
 
 // ---------- Library ----------
@@ -140,7 +147,7 @@ function renderLibrary() {
     v.innerHTML = `
       <div class="lib-controls">
         <label class="search">${I.search}<input type="search" id="libSearch" placeholder="Search moves, notes, clips" autocomplete="off"></label>
-        <div class="seg" id="libMode"><button data-mode="type">By type</button><button data-mode="position">By position</button></div>
+        <div class="seg" id="libMode"><button data-mode="type">By type</button><button data-mode="position">By position</button><button data-mode="paths">Paths</button></div>
         <div class="chips" id="libChips">
           <button data-f="all">All</button><button data-f="fav">★ Favorites</button>
           ${TYPE_KEYS.map(k => `<button data-f="${k}" style="--c:${TYPES[k].color}">${TYPES[k].plural}</button>`).join('')}
@@ -151,6 +158,9 @@ function renderLibrary() {
     $('#libMode').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { ui.libMode = b.dataset.mode; savePrefs(); renderLibrary(); } });
     $('#libChips').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { ui.libFilter = b.dataset.f; savePrefs(); renderLibrary(); } });
     $('#libList').addEventListener('click', e => {
+      const pathCard = e.target.closest('[data-path]');
+      if (pathCard) { openPath(pathCard.dataset.path); return; }
+      if (e.target.closest('[data-new-path]')) { newPath(); return; }
       const add = e.target.closest('[data-add-from]');
       if (add) { addConnection(add.dataset.addFrom, 'out'); return; }
       const b = e.target.closest('[data-id]');
@@ -184,6 +194,7 @@ function renderLibList() {
     return;
   }
   let html = '';
+  if (ui.libMode === 'paths') { list.innerHTML = pathsListHTML(q); return; }
   if (ui.libMode === 'type') {
     for (const k of TYPE_KEYS) {
       if (ui.libFilter !== 'all' && ui.libFilter !== 'fav' && ui.libFilter !== k) continue;
@@ -272,6 +283,7 @@ function openNode(startId) {
     const t = TYPES[n.type];
     const chapters = S.chaptersForNode(n.id);
     const journalLinks = S.journalForNode(n.id);
+    const pathLinks = S.pathsForNode(n.id);
     body.innerHTML = `
       <div class="sheet-head">
         ${st.history.length ? `<button class="icon-btn" data-act="back" aria-label="Back">${I.back}</button>` : ''}
@@ -300,6 +312,9 @@ function openNode(startId) {
       </section>
       ${chapters.length ? `<section class="sec"><div class="sec-head"><h3>In your courses</h3></div><div class="list">
         ${chapters.map(({ course, chapter }) => `<button class="row" data-act="course" data-course="${course.id}"><span class="row-main"><span class="row-title">${esc(chapter.title)}</span><span class="row-sub">${esc(course.title)}${chapter.time ? ` · @ ${esc(chapter.time)}` : ''}</span></span>${I.chev}</button>`).join('')}
+      </div></section>` : ''}
+      ${pathLinks.length ? `<section class="sec"><div class="sec-head"><h3>In your paths <span class="count">${pathLinks.length}</span></h3></div><div class="list">
+        ${pathLinks.map(p => `<button class="row" data-act="path" data-path="${p.id}"><span class="path-ico ${p.starred ? 'on' : ''}">${p.starred ? '★' : '↝'}</span><span class="row-main"><span class="row-title">${esc(p.name)}</span><span class="row-sub">Step ${p.steps.indexOf(n.id) + 1} of ${p.steps.length}</span></span>${I.chev}</button>`).join('')}
       </div></section>` : ''}
       ${journalLinks.length ? `<section class="sec"><div class="sec-head"><h3>In your journal <span class="count">${journalLinks.length}</span></h3></div><div class="list">
         ${journalLinks.map(j => `<button class="row" data-act="entry" data-entry="${j.id}"><span class="badge" style="--c:${JKIND[j.kind].color}">${JKIND[j.kind].short}</span><span class="row-main"><span class="row-title">${esc(entryTitle(j))}</span><span class="row-sub">${fmtDate(j.date)}</span></span>${I.chev}</button>`).join('')}
@@ -331,6 +346,7 @@ function openNode(startId) {
       }
       if (act === 'course') openCourse(b.dataset.course);
       if (act === 'entry') openEntry(b.dataset.entry);
+      if (act === 'path') openPath(b.dataset.path);
       if (act === 'web' || act === 'flow' || act === 'max') { closeAllSheets(); showOnMap(n.id, act); }
       if (act === 'delete') {
         if (confirm(`Delete “${n.name}” and all of its connections?`)) { S.deleteNode(n.id); if (st.history.length) { st.id = st.history.pop(); sheet.refresh(); } else sheet.close(); toast('Move deleted'); }
@@ -382,7 +398,7 @@ function addConnection(nodeId, dir) {
 }
 
 // Searchable move picker; can also create a new move inline.
-function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate = true, onPick }) {
+function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate = true, onPick, suggest = [], suggestLabel = 'Suggested' }) {
   openSheet((body, sheet) => {
     body.innerHTML = `
       <div class="sheet-head"><h3 class="head-title">${esc(title)}</h3><span class="spacer"></span><button class="icon-btn" data-close>${I.close}</button></div>
@@ -400,7 +416,12 @@ function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate
         html += `<div class="pk-create"><div class="pk-create-title">Create “${esc(query)}” as…</div><div class="chip-wrap">
           ${TYPE_KEYS.map(k => `<button class="mchip" data-create="${k}" style="--c:${color(k)}">${TYPES[k].label}</button>`).join('')}</div></div>`;
       }
-      html += `<div class="list">${items.map(n => `<button class="row" data-pick="${n.id}">${dot(n.type)}<span class="row-main"><span class="row-title">${esc(n.name)}</span><span class="row-sub">${TYPES[n.type].label}</span></span></button>`).join('')}</div>`;
+      const rowHTML = (n, sub) => `<button class="row" data-pick="${n.id}">${dot(n.type)}<span class="row-main"><span class="row-title">${esc(n.name)}</span><span class="row-sub">${sub || TYPES[n.type].label}</span></span></button>`;
+      const sugg = !query ? suggest.map(s => ({ n: S.node(s.id), why: s.why })).filter(s => s.n && !exclude.has(s.n.id)) : [];
+      if (sugg.length) {
+        html += `<h4 class="group-head">${esc(suggestLabel)}</h4><div class="list">${sugg.map(s => rowHTML(s.n, s.why ? `${TYPES[s.n.type].label} · ${esc(s.why)}` : '')).join('')}</div><h4 class="group-head">All moves</h4>`;
+      }
+      html += `<div class="list">${items.map(n => rowHTML(n)).join('')}</div>`;
       if (!items.length && !(allowCreate && query)) html += '<p class="empty-small">No moves found.</p>';
       list.innerHTML = html;
     };
@@ -529,8 +550,12 @@ function renderMap() {
       if (b.dataset.act === 'max') setMapMode('max');
       if (b.dataset.act === 'web') setMapMode('web');
       if (b.dataset.act === 'clear') clearMapSelection();
+      if (b.dataset.act === 'path-open') openPath(ui.mapPath);
+      if (b.dataset.act === 'path-clear') { ui.mapPath = null; savePrefs(); graph.showPath(null); graph.fit(graph.scene?.nodes); updateMapCard(); }
     };
     graph.rebuild({ fit: true, animate: false });
+    const savedPath = ui.mapPath && S.path(ui.mapPath);
+    if (savedPath && ui.mapMode === 'web' && !graph.selected) graph.showPath(savedPath.steps);
     updateMapCard();
   } else {
     graph.rebuild({ fit: false, animate: false });
@@ -583,6 +608,14 @@ function updateMapCard() {
   const n = graph.selected && S.node(graph.selected);
   if (!S.db().nodes.length) {
     card.innerHTML = `<div class="mc-hint">No moves yet — tap <b>+</b> to add one.</div>`;
+    return;
+  }
+  const shownPath = ui.mapPath && S.path(ui.mapPath);
+  if (!n && shownPath && ui.mapMode === 'web') {
+    card.innerHTML = `<span class="path-ico ${shownPath.starred ? 'on' : ''}">${shownPath.starred ? '★' : '↝'}</span>
+      <div class="mc-main"><div class="mc-name">${esc(shownPath.name)}</div><div class="mc-sub">${shownPath.steps.length} steps · tap a box for details</div></div>
+      <button class="btn sm primary" data-act="path-open">Steps</button>
+      <button class="icon-btn sm" data-act="path-clear" aria-label="Stop showing path">${I.close}</button>`;
     return;
   }
   if (!n) {
@@ -753,6 +786,158 @@ function editChapter(courseId, chId, isNew) {
         openPicker({ title: 'Link a move to this chapter', exclude: new Set(ch.nodeIds), onPick: nid => { S.updateChapter(courseId, chId, { nodeIds: [...ch.nodeIds, nid] }); } });
       }
       if (act === 'delete') { if (confirm('Delete this chapter?')) { S.deleteChapter(courseId, chId); sheet.close(); } }
+    };
+  });
+}
+
+// ---------- Paths (game plans) ----------
+function pathsListHTML(q) {
+  const paths = S.pathsSorted();
+  const ql = q.toLowerCase();
+  const hit = p => !q || ql.split(/\s+/).every(w => [p.name, p.notes, ...p.steps.map(id => S.node(id)?.name || '')].join(' ').toLowerCase().includes(w));
+  if (!paths.length) {
+    return `<div class="empty"><p>Build your go-to sequences — like a competition A-game from the takedown to the finish. Star one to make it your main plan.</p><button class="btn primary" data-new-path>Create a path</button></div>`;
+  }
+  const items = paths.filter(hit);
+  return `<button class="new-path" data-new-path>${I.plus}New path</button>` + (items.map(p => `
+    <button class="path-card ${p.starred ? 'starred' : ''}" data-path="${p.id}">
+      <div class="path-top">${p.starred ? '<span class="path-badge">★ Main plan</span>' : ''}<span class="spacer"></span><span class="row-sub">${p.steps.length} step${p.steps.length === 1 ? '' : 's'}</span>${I.chev}</div>
+      <div class="path-name">${esc(p.name)}</div>
+      ${p.steps.length ? `<div class="path-chain">${p.steps.map(id => S.node(id)).filter(Boolean).map(n => `<span class="pc-step" style="--c:${color(n.type)}">${esc(n.name)}</span>`).join('<span class="pc-arrow">→</span>')}</div>` : '<div class="row-sub">No steps yet</div>'}
+    </button>`).join('') || `<div class="empty"><p>No paths match “${esc(q)}”.</p></div>`);
+}
+
+function newPath() {
+  editPathName(null, p => openPath(p.id, true));
+}
+
+function editPathName(id, after) {
+  const p = id ? S.path(id) : null;
+  openSheet((body, sheet) => {
+    body.innerHTML = `
+      <div class="sheet-head"><h3 class="head-title">${p ? 'Rename path' : 'New path'}</h3><span class="spacer"></span><button class="icon-btn" data-close>${I.close}</button></div>
+      <label class="field"><span>Name</span><input class="input f-name" value="${esc(p?.name || '')}" placeholder="e.g. Competition A-game, No-gi plan, Bottom game" autocomplete="off"></label>
+      <button class="btn primary wide" data-save>${p ? 'Save' : 'Create path'}</button>`;
+    const name = $('.f-name', body);
+    setTimeout(() => name.focus(), 320);
+    const save = () => {
+      const nm = name.value.trim();
+      if (!nm) { name.focus(); return; }
+      let res;
+      if (p) { S.updatePath(p.id, { name: nm }); res = S.path(p.id); } else res = S.addPath({ name: nm });
+      sheet.close();
+      after?.(res);
+    };
+    name.onkeydown = e => { if (e.key === 'Enter') save(); };
+    body.onclick = e => {
+      if (e.target.closest('[data-close]')) sheet.close();
+      if (e.target.closest('[data-save]')) save();
+    };
+  }, { className: 'compact' });
+}
+
+function actionSheet(title, actions) {
+  openSheet((body, sheet) => {
+    body.innerHTML = `<div class="action-title">${esc(title)}</div>
+      ${actions.map((a, i) => `<button class="action ${a.danger ? 'danger' : ''}" data-i="${i}">${esc(a.label)}</button>`).join('')}
+      <button class="action cancel">Cancel</button>`;
+    body.onclick = e => {
+      const b = e.target.closest('button');
+      if (!b) return;
+      sheet.close();
+      if (b.dataset.i != null) actions[+b.dataset.i].run();
+    };
+  }, { className: 'compact' });
+}
+
+function addPathStep(pathId) {
+  const p = S.path(pathId);
+  const last = S.node(p.steps[p.steps.length - 1]);
+  openPicker({
+    title: last ? `Next step after ${last.name}` : 'First step',
+    allowCreate: true,
+    suggest: last ? S.outgoing(last.id).map(e => ({ id: e.to, why: e.label })) : [],
+    suggestLabel: last ? `Flows from ${last.name}` : '',
+    onPick: id => {
+      S.updatePath(pathId, { steps: [...S.path(pathId).steps, id] });
+      // Keep the map in sync: a path step implies a connection from the previous step.
+      if (last && !S.outgoing(last.id).some(e => e.to === id)) { S.addEdge(last.id, id); toast(`Also connected ${last.name} → ${S.node(id).name}`); }
+    },
+  });
+}
+
+function openPath(id, isNew) {
+  openSheet((body, sheet) => {
+    const p = S.path(id);
+    if (!p) { sheet.close(); return; }
+    const steps = p.steps.map(sid => S.node(sid));
+    body.innerHTML = `
+      <div class="sheet-head">
+        <span class="badge" style="--c:#ffcc4d">Path</span>
+        <span class="spacer"></span>
+        <button class="icon-btn" data-act="star" aria-label="Main plan">${p.starred ? I.starOn : I.star}</button>
+        <button class="icon-btn" data-act="rename" aria-label="Rename">${I.edit}</button>
+        <button class="icon-btn" data-act="close" aria-label="Close">${I.close}</button>
+      </div>
+      <h2 class="sheet-title">${esc(p.name)}</h2>
+      ${p.starred ? '<div class="path-badge inline">★ Main plan</div>' : '<div class="row-sub">Tap ☆ to make this a main plan — main plans are listed first.</div>'}
+      <div class="btn-row"><button class="btn" data-act="map" ${p.steps.length ? '' : 'disabled'}>${I.map}Show on map</button></div>
+      <section class="sec">
+        <div class="sec-head"><h3>Steps <span class="count">${p.steps.length}</span></h3></div>
+        <div class="path-steps">
+          ${steps.map((n, i) => {
+            const prev = i > 0 ? steps[i - 1] : null;
+            const edge = prev && S.outgoing(prev.id).find(e => e.to === n.id);
+            const link = !prev ? '' : edge
+              ? `<button class="path-link" data-act="edge" data-edge="${edge.id}"><span class="pl-arrow">↓</span><span class="pl-text">${edge.label ? `<span><b class="why-tag">Why</b> ${esc(edge.label)}</span>` : ''}${edge.how ? `<span><b class="how-tag">How</b> ${esc(edge.how)}</span>` : ''}${!edge.label && !edge.how ? '<span class="pl-empty">Add why / how</span>' : ''}</span></button>`
+              : `<div class="path-link missing"><span class="pl-arrow">↓</span><span class="pl-text">Not connected on your map</span><button class="link-btn" data-act="connect" data-i="${i}">Connect</button></div>`;
+            return `${link}<div class="path-step"><span class="ps-num">${i + 1}</span>
+              <button class="ps-main" data-act="node" data-id="${n.id}">${dot(n.type)}<span class="row-main"><span class="row-title">${esc(n.name)}</span><span class="row-sub">${TYPES[n.type].label}</span></span></button>
+              <button class="icon-btn sm" data-act="step" data-i="${i}" aria-label="Step options">${I.dots}</button></div>`;
+          }).join('')}
+          <button class="btn wide add-step" data-act="add-step">${I.plus}${p.steps.length ? 'Add next step' : 'Add first step'}</button>
+        </div>
+      </section>
+      <section class="sec">
+        <div class="sec-head"><h3>Game plan notes</h3><span class="saved">Saved</span></div>
+        <textarea class="notes" rows="3" placeholder="Strategy, grips, what to do if they defend…">${esc(p.notes)}</textarea>
+      </section>
+      <button class="btn danger wide" data-act="delete">${I.trash}Delete path</button>`;
+    const notes = $('.notes', body), saved = $('.saved', body);
+    const save = debounce(v => { S.updatePath(id, { notes: v }); saved.classList.add('show'); setTimeout(() => saved.classList.remove('show'), 1200); }, 500);
+    notes.oninput = () => save(notes.value);
+    notes.onblur = () => { if (notes.value !== S.path(id)?.notes) S.updatePath(id, { notes: notes.value }); };
+    if (isNew && !p.steps.length && !sheet.state.prompted) { sheet.state.prompted = true; setTimeout(() => addPathStep(id), 350); }
+    body.onclick = e => {
+      const b = e.target.closest('[data-act]');
+      if (!b) return;
+      const act = b.dataset.act, i = +b.dataset.i;
+      if (act === 'close') sheet.close();
+      if (act === 'star') { S.updatePath(id, { starred: !p.starred }); sheet.refresh(); }
+      if (act === 'rename') editPathName(id);
+      if (act === 'node') openNode(b.dataset.id);
+      if (act === 'edge') edgeActions(b.dataset.edge);
+      if (act === 'connect') { S.addEdge(p.steps[i - 1], p.steps[i]); sheet.refresh(); toast('Connected'); }
+      if (act === 'add-step') addPathStep(id);
+      if (act === 'map') {
+        closeAllSheets();
+        ui.mapPath = id; ui.mapSelected = null; ui.mapMode = 'web'; savePrefs();
+        setView('map');
+        $$('#mapMode button').forEach(x => x.classList.toggle('active', x.dataset.mode === 'web'));
+        graph.showPath(S.path(id).steps);
+        updateMapCard();
+      }
+      if (act === 'step') {
+        const n = S.node(p.steps[i]);
+        const move = dir => { const s = [...p.steps]; [s[i], s[i + dir]] = [s[i + dir], s[i]]; S.updatePath(id, { steps: s }); sheet.refresh(); };
+        actionSheet(`Step ${i + 1}: ${n.name}`, [
+          ...(i > 0 ? [{ label: 'Move up', run: () => move(-1) }] : []),
+          ...(i < p.steps.length - 1 ? [{ label: 'Move down', run: () => move(1) }] : []),
+          { label: 'Open move', run: () => openNode(n.id) },
+          { label: 'Remove from path', danger: true, run: () => { S.updatePath(id, { steps: p.steps.filter((_, j) => j !== i) }); sheet.refresh(); } },
+        ]);
+      }
+      if (act === 'delete') { if (confirm(`Delete path “${p.name}”? Your moves and connections stay.`)) { if (ui.mapPath === id) { ui.mapPath = null; savePrefs(); } S.deletePath(id); sheet.close(); toast('Path deleted'); } }
     };
   });
 }

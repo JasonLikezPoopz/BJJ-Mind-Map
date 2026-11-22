@@ -105,6 +105,13 @@ export function makeSeed() {
       id, name, type, tags: [], notes: '', clips: [], favorite: false, created: now + i,
     })),
     edges: E.map(([from, to, label = ''], i) => ({ id: 'e' + i, from, to, label })),
+    paths: [
+      {
+        id: 'sample-path', name: 'Sample: Competition A-game', starred: true, created: now,
+        notes: 'Example game plan — edit it or make your own. Pull guard, break posture, hip bump when they post up, finish from mount.',
+        steps: ['standing', 'guard-pull', 'closed-guard', 'hip-bump', 'mount-top', 'armbar'],
+      },
+    ],
     journal: [
       {
         id: 'sample-lesson', kind: 'lesson', date: isoDaysAgo(2), title: 'Sample: Armbar from closed guard', coach: 'Example coach', school: 'Example Academy',

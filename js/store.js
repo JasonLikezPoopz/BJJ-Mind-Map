@@ -42,7 +42,7 @@ let layout = {};
 const listeners = new Set();
 
 function blank() {
-  return { version: 1, nodes: [], edges: [], courses: [], journal: [] };
+  return { version: 1, nodes: [], edges: [], courses: [], journal: [], paths: [] };
 }
 
 function normalize(d) {
@@ -77,6 +77,14 @@ function normalize(d) {
     })),
   }));
   out.migrations = Array.isArray(d.migrations) ? d.migrations : [];
+  out.paths = (d.paths || []).map(p => ({
+    id: p.id || uid(),
+    name: p.name || 'Untitled path',
+    notes: p.notes || '',
+    starred: !!p.starred,
+    steps: (p.steps || []).filter(id => ids.has(id)),
+    created: p.created || Date.now(),
+  }));
   out.journal = (d.journal || []).map(j => ({
     id: j.id || uid(),
     kind: j.kind === 'roll' ? 'roll' : 'lesson',
@@ -151,6 +159,7 @@ export function deleteNode(id) {
   data.edges = data.edges.filter(e => e.from !== id && e.to !== id);
   data.courses.forEach(c => c.chapters.forEach(ch => { ch.nodeIds = ch.nodeIds.filter(x => x !== id); }));
   data.journal.forEach(j => { j.nodeIds = j.nodeIds.filter(x => x !== id); });
+  data.paths.forEach(p => { p.steps = p.steps.filter(x => x !== id); });
   delete layout[id];
   saveLayout(layout);
   changed();
@@ -271,6 +280,27 @@ export function schools() {
   return [...seen];
 }
 export const journalForNode = nodeId => journalSorted().filter(j => j.nodeIds.includes(nodeId));
+
+// ---------- paths (game plans) ----------
+// A path is an ordered list of moves, e.g. Standing → Guard Pull → Closed Guard → Hip Bump → Mount → Armbar.
+// Starred paths are your main plans and are listed first.
+export const path = id => data.paths.find(p => p.id === id);
+export const pathsSorted = () => [...data.paths].sort((a, b) => (b.starred - a.starred) || a.created - b.created);
+export function addPath(patch = {}) {
+  const p = { id: uid(), name: 'New path', notes: '', starred: false, steps: [], created: Date.now(), ...patch };
+  data.paths.push(p);
+  changed();
+  return p;
+}
+export function updatePath(id, patch) {
+  const p = path(id);
+  if (p) { Object.assign(p, patch); changed(); }
+}
+export function deletePath(id) {
+  data.paths = data.paths.filter(p => p.id !== id);
+  changed();
+}
+export const pathsForNode = nodeId => pathsSorted().filter(p => p.steps.includes(nodeId));
 
 // ---------- backup ----------
 export function exportJSON() {
