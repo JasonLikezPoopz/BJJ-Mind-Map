@@ -1070,6 +1070,10 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   });
 }
 
+// Lock page zoom: iOS Safari ignores user-scalable=no, so block its pinch gesture events.
+// The map's own pinch-to-zoom uses pointer events, so it keeps working.
+['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+
 // Ask iOS to keep this app's storage instead of clearing it when space runs low.
 navigator.storage?.persist?.().catch(() => {});
 updateBackupBar();
