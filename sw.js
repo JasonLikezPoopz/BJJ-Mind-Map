@@ -1,5 +1,5 @@
 // Offline support: network-first for the app's own files (so updates show up), cache fallback when offline.
-const CACHE = 'bjj-mind-map-v8';
+const CACHE = 'bjj-mind-map-v9';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/store.js', 'js/graph.js', 'js/clips.js', 'js/seed.js',

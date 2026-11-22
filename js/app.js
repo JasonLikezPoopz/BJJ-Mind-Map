@@ -107,7 +107,7 @@ function actionSheet(title, actions) {
 }
 
 // ---------- tabs ----------
-const VIEW_TITLES = { library: 'Library', map: 'Mind Map', journal: 'Journal', courses: 'Courses', more: 'More' };
+const VIEW_TITLES = { library: 'Library', map: 'Map', journal: 'Journal', courses: 'Courses', more: 'More' };
 function setView(v) {
   ui.view = v; savePrefs();
   $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
@@ -525,6 +525,7 @@ function renderMap() {
       if (b.dataset.act === 'open') openNode(graph.selected);
       if (b.dataset.act === 'flow') setMapMode('flow');
       if (b.dataset.act === 'web') setMapMode('web');
+      if (b.dataset.act === 'clear') clearMapSelection();
     };
     graph.rebuild({ fit: true, animate: false });
     updateMapCard();
@@ -545,6 +546,15 @@ function setMapMode(mode) {
   graph.setMode(mode);
   if (mode === 'web' && graph.selected) graph.centerOn(graph.selected, 1);
   $$('#mapMode button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  updateMapCard();
+}
+
+// Deselect and go back to the whole web.
+function clearMapSelection() {
+  ui.mapSelected = null; savePrefs();
+  graph.selected = null;
+  if (ui.mapMode === 'flow') { ui.mapMode = 'web'; savePrefs(); graph.setMode('web'); $$('#mapMode button').forEach(b => b.classList.toggle('active', b.dataset.mode === 'web')); }
+  else { graph.applyHighlight(); graph.fit(graph.scene?.nodes); }
   updateMapCard();
 }
 
@@ -573,7 +583,7 @@ function updateMapCard() {
     return;
   }
   if (!n) {
-    card.innerHTML = `<div class="mc-hint">Tap a box to see what flows in &amp; out · pinch to zoom · drag boxes to arrange</div>`;
+    card.innerHTML = `<div class="mc-hint">Tap a box to see what flows in &amp; out · tap ✕ or empty space to show everything</div>`;
     return;
   }
   const ins = S.incoming(n.id).length, outs = S.outgoing(n.id).length;
@@ -582,7 +592,8 @@ function updateMapCard() {
     <div class="mc-main"><div class="mc-name">${esc(n.name)}</div>
       <div class="mc-sub"><span class="in-txt">${ins} in</span> · <span class="out-txt">${outs} out</span>${ui.mapMode === 'flow' ? ' · tap a box to follow' : ''}</div></div>
     ${ui.mapMode === 'web' ? `<button class="btn sm" data-act="flow">Flow</button>` : `<button class="btn sm" data-act="web">Web</button>`}
-    <button class="btn sm primary" data-act="open">Details</button>`;
+    <button class="btn sm primary" data-act="open">Details</button>
+    <button class="icon-btn sm" data-act="clear" aria-label="Show everything">${I.close}</button>`;
 }
 
 window.addEventListener('resize', debounce(() => { if (graph && ui.view === 'map') graph.rebuild({ fit: ui.mapMode === 'flow', animate: false }); }, 200));
@@ -1038,7 +1049,7 @@ async function exportBackup() {
 
 // ---------- boot ----------
 $('#tabbar').innerHTML = ['library', 'map', 'journal', 'courses', 'more']
-  .map(v => `<button class="tab" data-view="${v}">${I[v]}<span>${VIEW_TITLES[v] === 'Mind Map' ? 'Map' : VIEW_TITLES[v]}</span></button>`).join('');
+  .map(v => `<button class="tab" data-view="${v}">${I[v]}<span>${VIEW_TITLES[v]}</span></button>`).join('');
 $('#tabbar').addEventListener('click', e => { const t = e.target.closest('.tab'); if (t) { closeAllSheets(); setView(t.dataset.view); } });
 setView(VIEW_TITLES[ui.view] ? ui.view : 'library');
 

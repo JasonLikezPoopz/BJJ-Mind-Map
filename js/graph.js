@@ -479,7 +479,7 @@ export class GraphView {
       if (!drag) return;
       const p = local(e);
       const dx = p.x - drag.sx, dy = p.y - drag.sy;
-      if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+      if (!drag.moved && Math.hypot(dx, dy) < 10) return;
       drag.moved = true;
       if (drag.item && this.mode === 'web') {
         drag.item.x = drag.ox + dx / this.scale; drag.item.y = drag.oy + dy / this.scale;
