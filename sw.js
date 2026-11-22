@@ -1,5 +1,5 @@
 // Offline support: network-first for the app's own files (so updates show up), cache fallback when offline.
-const CACHE = 'bjj-mind-map-v2';
+const CACHE = 'bjj-mind-map-v3';
 const SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/styles.css',
   'js/app.js', 'js/store.js', 'js/graph.js', 'js/clips.js', 'js/seed.js',
@@ -16,7 +16,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req).then(res => {
+    // cache: 'no-cache' revalidates with the server, so a new version shows up right away instead of after GitHub's 10-minute cache.
+    fetch(req, { cache: 'no-cache' }).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
       return res;
     }).catch(() => caches.match(req, { ignoreSearch: true }).then(r => r || caches.match('index.html')))
