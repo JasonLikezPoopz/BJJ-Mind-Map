@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BJJ Map">
+  <meta name="theme-color" content="#0e0f13">
+  <meta name="description" content="Organize your Brazilian Jiu-Jitsu game: moves, flows, notes, clips and courses.">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="css/styles.css">
+  <title>BJJ Mind Map</title>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <h1 id="title">Library</h1>
+      <div class="top-actions" id="topActions"></div>
+    </header>
+    <main id="views">
+      <section id="view-library" class="view"></section>
+      <section id="view-map" class="view map-view"></section>
+      <section id="view-courses" class="view"></section>
+      <section id="view-more" class="view"></section>
+    </main>
+    <nav class="tabbar" id="tabbar"></nav>
+  </div>
+  <div id="sheets"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

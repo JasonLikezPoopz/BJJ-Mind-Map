@@ -1,0 +1,47 @@
+# BJJ Mind Map
+
+A phone-first web app for organizing your Brazilian Jiu-Jitsu game. Add it to your iPhone home screen and it runs full-screen like a normal app, offline.
+
+## Features
+
+- **Library**: every move, grouped **by type** (positions, submissions, sweeps, passes, escapes, takedowns, transitions) or **by position** (each position shows its submissions, sweeps, passes and where it leads). Search covers names, notes, tags and clip titles. You can star favorites.
+- **Mind map**
+  - **Web**: the whole game as a spider web. Tap a box and the moves that flow **in** light up blue, the moves that flow **out** light up orange, and everything else fades. Pinch to zoom, drag the background to pan, drag boxes to arrange them. Tap the selected box again to open its details.
+  - **Flow**: a focused view with the chosen move in the middle, what flows into it above and what flows out of it below. Tap any box to follow the chain.
+- **Move details**: flows in and out (each connection can carry a "when / how" note such as *they posture up*), notes, clips, and the course chapters that cover the move.
+- **Clips**: paste a YouTube, BJJ Fanatics, Submeta or any other link, with an optional timestamp. YouTube clips play inside the app starting at the timestamp. BJJ Fanatics and Submeta don't allow embedding, so those open in their own site or app.
+- **Courses**: track instructionals, split them into chapters with timestamps, tick chapters off and link each one to the moves it teaches.
+- **Backup**: export and import a JSON file from the **More** tab.
+
+## Put it on your iPhone
+
+The app is a set of static files, so any static host works. GitHub Pages is free:
+
+1. In this repo on GitHub, open **Settings → Pages**.
+2. Under **Build and deployment**, pick **Deploy from a branch**, choose the branch with this code and the `/ (root)` folder, then **Save**.
+3. After a minute your app is at `https://<your-username>.github.io/BJJ-Mind-Map/`.
+4. Open that link in **Safari** on your iPhone, tap **Share**, then **Add to Home Screen**.
+
+> Your data lives only on the device, in the app's local storage. The home-screen app and Safari keep **separate** storage, so start using the app from the home-screen icon. Export a backup now and then (to iCloud Drive, for example).
+
+## Run locally
+
+```sh
+python3 -m http.server 8000
+# open http://localhost:8000
+```
+
+There's no build step and no dependencies: it's plain HTML, CSS and JavaScript modules.
+
+## Files
+
+| Path | What it is |
+| --- | --- |
+| `index.html` | App shell |
+| `css/styles.css` | Styles (dark and light mode) |
+| `js/app.js` | UI: tabs, library, detail sheets, courses, settings |
+| `js/graph.js` | Spider-web and flow renderer: force layout, pan, zoom, drag |
+| `js/store.js` | Data model and local-storage persistence |
+| `js/clips.js` | Link source detection, YouTube and timestamp parsing |
+| `js/seed.js` | Starter game loaded on first launch |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Offline support and home-screen install |

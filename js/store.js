@@ -1,0 +1,219 @@
+// Data store: everything lives in localStorage on the device.
+import { makeSeed } from './seed.js';
+
+const KEY = 'bjj-mind-map:data:v1';
+const LAYOUT_KEY = 'bjj-mind-map:layout:v1';
+
+export const TYPES = {
+  position:   { label: 'Position',   plural: 'Positions',   color: '#8b9cff' },
+  submission: { label: 'Submission', plural: 'Submissions', color: '#ff6b6b' },
+  sweep:      { label: 'Sweep',      plural: 'Sweeps',      color: '#3ddc97' },
+  pass:       { label: 'Pass',       plural: 'Passes',      color: '#ffb84d' },
+  escape:     { label: 'Escape',     plural: 'Escapes',     color: '#4cc9f0' },
+  takedown:   { label: 'Takedown',   plural: 'Takedowns',   color: '#ff7ac6' },
+  transition: { label: 'Transition', plural: 'Transitions', color: '#b9b9c9' },
+};
+export const TYPE_KEYS = Object.keys(TYPES);
+
+export function uid() {
+  if (crypto.randomUUID) return crypto.randomUUID().slice(0, 12);
+  return Math.random().toString(36).slice(2, 14);
+}
+
+let data = null;
+let layout = {};
+const listeners = new Set();
+
+function blank() {
+  return { version: 1, nodes: [], edges: [], courses: [] };
+}
+
+function normalize(d) {
+  const out = blank();
+  out.nodes = (d.nodes || []).map(n => ({
+    id: n.id || uid(),
+    name: n.name || 'Untitled',
+    type: TYPES[n.type] ? n.type : 'transition',
+    tags: Array.isArray(n.tags) ? n.tags : [],
+    notes: n.notes || '',
+    clips: Array.isArray(n.clips) ? n.clips : [],
+    favorite: !!n.favorite,
+    created: n.created || Date.now(),
+  }));
+  const ids = new Set(out.nodes.map(n => n.id));
+  out.edges = (d.edges || []).filter(e => ids.has(e.from) && ids.has(e.to) && e.from !== e.to)
+    .map(e => ({ id: e.id || uid(), from: e.from, to: e.to, label: e.label || '' }));
+  out.courses = (d.courses || []).map(c => ({
+    id: c.id || uid(),
+    title: c.title || 'Untitled course',
+    instructor: c.instructor || '',
+    url: c.url || '',
+    notes: c.notes || '',
+    chapters: (c.chapters || []).map(ch => ({
+      id: ch.id || uid(),
+      title: ch.title || 'Chapter',
+      url: ch.url || '',
+      time: ch.time || '',
+      notes: ch.notes || '',
+      done: !!ch.done,
+      nodeIds: (ch.nodeIds || []).filter(id => ids.has(id)),
+    })),
+  }));
+  return out;
+}
+
+export function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    data = raw ? normalize(JSON.parse(raw)) : normalize(makeSeed());
+  } catch {
+    data = normalize(makeSeed());
+  }
+  try { layout = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}') || {}; } catch { layout = {}; }
+  persist();
+  return data;
+}
+
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { console.warn('save failed', e); }
+}
+export function saveLayout(l) {
+  layout = l;
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch {}
+}
+export function getLayout() { return layout; }
+
+function changed() {
+  persist();
+  listeners.forEach(fn => fn());
+}
+export function onChange(fn) { listeners.add(fn); }
+
+export const db = () => data;
+
+// ---------- nodes ----------
+export const node = id => data.nodes.find(n => n.id === id);
+export const nodesSorted = () => [...data.nodes].sort((a, b) => a.name.localeCompare(b.name));
+
+export function addNode({ name, type = 'position', tags = [] }) {
+  const n = { id: uid(), name: name.trim() || 'Untitled', type, tags, notes: '', clips: [], favorite: false, created: Date.now() };
+  data.nodes.push(n);
+  changed();
+  return n;
+}
+export function updateNode(id, patch) {
+  const n = node(id);
+  if (!n) return;
+  Object.assign(n, patch);
+  changed();
+}
+export function deleteNode(id) {
+  data.nodes = data.nodes.filter(n => n.id !== id);
+  data.edges = data.edges.filter(e => e.from !== id && e.to !== id);
+  data.courses.forEach(c => c.chapters.forEach(ch => { ch.nodeIds = ch.nodeIds.filter(x => x !== id); }));
+  delete layout[id];
+  saveLayout(layout);
+  changed();
+}
+
+// ---------- edges ----------
+export const incoming = id => data.edges.filter(e => e.to === id);
+export const outgoing = id => data.edges.filter(e => e.from === id);
+export function addEdge(from, to, label = '') {
+  if (from === to) return null;
+  const existing = data.edges.find(e => e.from === from && e.to === to);
+  if (existing) {
+    if (label) { existing.label = label; changed(); }
+    return existing;
+  }
+  const e = { id: uid(), from, to, label };
+  data.edges.push(e);
+  changed();
+  return e;
+}
+export function updateEdge(id, patch) {
+  const e = data.edges.find(x => x.id === id);
+  if (e) { Object.assign(e, patch); changed(); }
+}
+export function deleteEdge(id) {
+  data.edges = data.edges.filter(e => e.id !== id);
+  changed();
+}
+
+// ---------- clips ----------
+export function addClip(nodeId, clip) {
+  const n = node(nodeId);
+  if (!n) return;
+  n.clips.push({ id: uid(), ...clip });
+  changed();
+}
+export function deleteClip(nodeId, clipId) {
+  const n = node(nodeId);
+  if (!n) return;
+  n.clips = n.clips.filter(c => c.id !== clipId);
+  changed();
+}
+
+// ---------- courses ----------
+export const course = id => data.courses.find(c => c.id === id);
+export function addCourse(patch) {
+  const c = { id: uid(), title: 'New course', instructor: '', url: '', notes: '', chapters: [], ...patch };
+  data.courses.push(c);
+  changed();
+  return c;
+}
+export function updateCourse(id, patch) {
+  const c = course(id);
+  if (c) { Object.assign(c, patch); changed(); }
+}
+export function deleteCourse(id) {
+  data.courses = data.courses.filter(c => c.id !== id);
+  changed();
+}
+export function addChapter(courseId, patch) {
+  const c = course(courseId);
+  if (!c) return null;
+  const ch = { id: uid(), title: 'New chapter', url: '', time: '', notes: '', done: false, nodeIds: [], ...patch };
+  c.chapters.push(ch);
+  changed();
+  return ch;
+}
+export function updateChapter(courseId, chId, patch) {
+  const ch = course(courseId)?.chapters.find(x => x.id === chId);
+  if (ch) { Object.assign(ch, patch); changed(); }
+}
+export function deleteChapter(courseId, chId) {
+  const c = course(courseId);
+  if (c) { c.chapters = c.chapters.filter(x => x.id !== chId); changed(); }
+}
+export function moveChapter(courseId, chId, dir) {
+  const c = course(courseId);
+  if (!c) return;
+  const i = c.chapters.findIndex(x => x.id === chId);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= c.chapters.length) return;
+  [c.chapters[i], c.chapters[j]] = [c.chapters[j], c.chapters[i]];
+  changed();
+}
+export function chaptersForNode(nodeId) {
+  const out = [];
+  data.courses.forEach(c => c.chapters.forEach(ch => { if (ch.nodeIds.includes(nodeId)) out.push({ course: c, chapter: ch }); }));
+  return out;
+}
+
+// ---------- backup ----------
+export function exportJSON() {
+  return JSON.stringify({ ...data, exportedAt: new Date().toISOString(), layout }, null, 2);
+}
+export function importJSON(text) {
+  const parsed = JSON.parse(text);
+  if (!parsed || !Array.isArray(parsed.nodes)) throw new Error('Not a BJJ Mind Map backup file');
+  data = normalize(parsed);
+  saveLayout(parsed.layout && typeof parsed.layout === 'object' ? parsed.layout : {});
+  changed();
+}
+export function resetTo(kind) {
+  data = normalize(kind === 'sample' ? makeSeed() : blank());
+  saveLayout({});
+  changed();
+}
