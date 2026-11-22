@@ -91,6 +91,11 @@ const E = [
   ['upa', 'open-guard-top', 'land in their guard'], ['elbow-knee', 'half-guard'], ['elbow-knee', 'closed-guard'],
 ];
 
+function isoDaysAgo(n) {
+  const d = new Date(Date.now() - n * 86400000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function makeSeed() {
   const now = Date.now();
   return {
@@ -99,6 +104,19 @@ export function makeSeed() {
       id, name, type, tags: [], notes: '', clips: [], favorite: false, created: now + i,
     })),
     edges: E.map(([from, to, label = ''], i) => ({ id: 'e' + i, from, to, label })),
+    journal: [
+      {
+        id: 'sample-lesson', kind: 'lesson', date: isoDaysAgo(2), title: 'Sample: Armbar from closed guard', coach: 'Example coach',
+        body: 'Break posture first — pull them down before swinging the leg.\nPinch knees together and lift the hips; thumb up on their wrist.\nIf they stack, switch to the triangle.',
+        nodeIds: ['armbar', 'closed-guard', 'triangle'], created: now - 2,
+      },
+      {
+        id: 'sample-roll', kind: 'roll', date: isoDaysAgo(1), title: 'Sample: Open mat', partner: 'Training partner',
+        worked: 'Hit the hip bump twice when they posted up.', struggled: 'Kept getting stuck under side control — framed too late.',
+        nextFocus: 'Frame early from bottom side control and recover guard.', feel: 4,
+        nodeIds: ['hip-bump', 'side-bottom', 'frame-reguard'], created: now - 1,
+      },
+    ],
     courses: [
       {
         id: 'sample-course',

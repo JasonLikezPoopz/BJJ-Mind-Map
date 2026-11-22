@@ -14,15 +14,17 @@ const dot = type => `<span class="dot" style="--c:${color(type)}"></span>`;
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 
 const PREFS_KEY = 'bjj-mind-map:ui';
-const ui = Object.assign({ view: 'library', libMode: 'type', libFilter: 'all', mapMode: 'web', mapSelected: null },
+const ui = Object.assign({ view: 'library', libMode: 'type', libFilter: 'all', mapMode: 'web', mapSelected: null, journalKind: 'lesson' },
   (() => { try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { return {}; } })());
 ui.libQuery = '';
+ui.journalQuery = '';
 const savePrefs = () => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(ui)); } catch {} };
 
 const I = {
   library: '<svg viewBox="0 0 24 24"><path d="M4 5h4v14H4zM10 5h4v14h-4zM16.5 5.5l3.8 1-3.4 13-3.8-1z"/></svg>',
   map: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.6"/><circle cx="4.5" cy="5" r="2"/><circle cx="19.5" cy="5" r="2"/><circle cx="4.5" cy="19" r="2"/><circle cx="19.5" cy="19" r="2"/><path d="M6 6.3l4.2 4M18 6.3l-4.2 4M6 17.7l4.2-4M18 17.7l-4.2-4" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>',
   courses: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="12" rx="2.5"/><path d="M10 8.5v5l4.3-2.5z" fill="var(--tab-bg)"/><rect x="6" y="19" width="12" height="1.8" rx=".9"/></svg>',
+  journal: '<svg viewBox="0 0 24 24"><path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M8.5 7.5h7M8.5 11h7M8.5 14.5h4.5" stroke="var(--tab-bg)" stroke-width="1.6" stroke-linecap="round"/></svg>',
   more: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
   plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
   close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
@@ -103,7 +105,7 @@ function actionSheet(title, actions) {
 }
 
 // ---------- tabs ----------
-const VIEW_TITLES = { library: 'Library', map: 'Mind Map', courses: 'Courses', more: 'More' };
+const VIEW_TITLES = { library: 'Library', map: 'Mind Map', journal: 'Journal', courses: 'Courses', more: 'More' };
 function setView(v) {
   ui.view = v; savePrefs();
   $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + v));
@@ -113,6 +115,8 @@ function setView(v) {
   actions.innerHTML = '';
   if (v === 'library' || v === 'map') actions.innerHTML = `<button class="icon-btn accent" id="newMove" aria-label="New move">${I.plus}</button>`;
   if (v === 'courses') actions.innerHTML = `<button class="icon-btn accent" id="newCourse" aria-label="New course">${I.plus}</button>`;
+  if (v === 'journal') actions.innerHTML = `<button class="icon-btn accent" id="newEntry" aria-label="New journal entry">${I.plus}</button>`;
+  $('#newEntry')?.addEventListener('click', () => newEntry(ui.journalKind));
   $('#newMove')?.addEventListener('click', () => editNode(null, n => { if (ui.view === 'map') { mapSelect(n.id, true); } openNode(n.id); }));
   $('#newCourse')?.addEventListener('click', () => editCourse(null));
   render();
@@ -121,11 +125,13 @@ function render() {
   if (ui.view === 'library') renderLibrary();
   if (ui.view === 'map') renderMap();
   if (ui.view === 'courses') renderCourses();
+  if (ui.view === 'journal') renderJournal();
   if (ui.view === 'more') renderMore();
 }
 S.onChange(() => {
   if (ui.view === 'library') renderLibList();
   else if (ui.view === 'courses') renderCourses();
+  else if (ui.view === 'journal') renderJournalList();
   else if (ui.view === 'more') renderMore();
   else if (ui.view === 'map' && graph) { graph.rebuild({ animate: true }); updateMapCard(); }
 });
@@ -274,6 +280,7 @@ function openNode(startId) {
     if (!n) { sheet.close(); return; }
     const t = TYPES[n.type];
     const chapters = S.chaptersForNode(n.id);
+    const journalLinks = S.journalForNode(n.id);
     body.innerHTML = `
       <div class="sheet-head">
         ${st.history.length ? `<button class="icon-btn" data-act="back" aria-label="Back">${I.back}</button>` : ''}
@@ -302,6 +309,9 @@ function openNode(startId) {
       ${chapters.length ? `<section class="sec"><div class="sec-head"><h3>In your courses</h3></div><div class="list">
         ${chapters.map(({ course, chapter }) => `<button class="row" data-act="course" data-course="${course.id}"><span class="row-main"><span class="row-title">${esc(chapter.title)}</span><span class="row-sub">${esc(course.title)}${chapter.time ? ` · @ ${esc(chapter.time)}` : ''}</span></span>${I.chev}</button>`).join('')}
       </div></section>` : ''}
+      ${journalLinks.length ? `<section class="sec"><div class="sec-head"><h3>In your journal <span class="count">${journalLinks.length}</span></h3></div><div class="list">
+        ${journalLinks.map(j => `<button class="row" data-act="entry" data-entry="${j.id}"><span class="badge" style="--c:${JKIND[j.kind].color}">${JKIND[j.kind].short}</span><span class="row-main"><span class="row-title">${esc(entryTitle(j))}</span><span class="row-sub">${fmtDate(j.date)}</span></span>${I.chev}</button>`).join('')}
+      </div></section>` : ''}
       <button class="btn danger wide" data-act="delete">${I.trash}Delete move</button>`;
 
     const notes = $('.notes', body), saved = $('.saved', body);
@@ -328,6 +338,7 @@ function openNode(startId) {
         b.outerHTML = `<div class="yt playing"><iframe src="https://www.youtube-nocookie.com/embed/${encodeURIComponent(yt.id)}?autoplay=1&playsinline=1&rel=0${start ? `&start=${start}` : ''}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="YouTube clip"></iframe></div>`;
       }
       if (act === 'course') openCourse(b.dataset.course);
+      if (act === 'entry') openEntry(b.dataset.entry);
       if (act === 'web' || act === 'flow') { closeAllSheets(); showOnMap(n.id, act); }
       if (act === 'delete') {
         if (confirm(`Delete “${n.name}” and all of its connections?`)) { S.deleteNode(n.id); if (st.history.length) { st.id = st.history.pop(); sheet.refresh(); } else sheet.close(); toast('Move deleted'); }
@@ -725,6 +736,149 @@ function editChapter(courseId, chId, isNew) {
   });
 }
 
+// ---------- Journal ----------
+const JKIND = {
+  lesson: { label: 'Lessons', one: 'Lesson', short: 'Lesson', color: '#6e8bff' },
+  roll: { label: 'Rolling', one: 'Roll', short: 'Roll', color: '#ff9f43' },
+};
+const parseDate = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
+const fmtDate = iso => parseDate(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const entryTitle = j => j.title.trim() || (j.kind === 'lesson' ? 'Lesson' : j.partner ? `Rolls with ${j.partner}` : 'Rolling session');
+const entryText = j => [j.title, j.coach, j.body, j.partner, j.worked, j.struggled, j.nextFocus, ...j.nodeIds.map(id => S.node(id)?.name || '')].join(' ').toLowerCase();
+const feelDots = f => f ? `<span class="feel" aria-label="Felt ${f} of 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= f ? 'on' : ''}"></i>`).join('')}</span>` : '';
+
+function renderJournal() {
+  const v = $('#view-journal');
+  if (!v.dataset.ready) {
+    v.dataset.ready = '1';
+    v.innerHTML = `
+      <div class="lib-controls">
+        <label class="search">${I.search}<input type="search" id="jSearch" placeholder="Search your journal" autocomplete="off"></label>
+        <div class="seg" id="jKind"><button data-kind="lesson">Lessons</button><button data-kind="roll">Rolling</button></div>
+      </div>
+      <div id="jList" class="pad-bottom"></div>`;
+    $('#jSearch').addEventListener('input', e => { ui.journalQuery = e.target.value; renderJournalList(); });
+    $('#jKind').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { ui.journalKind = b.dataset.kind; savePrefs(); renderJournal(); } });
+    $('#jList').addEventListener('click', e => {
+      const c = e.target.closest('[data-entry]');
+      if (c) openEntry(c.dataset.entry);
+      if (e.target.closest('[data-new-entry]')) newEntry(ui.journalKind);
+    });
+  }
+  $$('#jKind button').forEach(b => b.classList.toggle('active', b.dataset.kind === ui.journalKind));
+  renderJournalList();
+}
+
+function renderJournalList() {
+  const list = $('#jList');
+  if (!list) return;
+  const kind = ui.journalKind;
+  const q = ui.journalQuery.trim().toLowerCase();
+  const all = S.journalSorted(kind);
+  const items = all.filter(j => !q || q.split(/\s+/).every(w => entryText(j).includes(w)));
+  if (!all.length) {
+    list.innerHTML = kind === 'lesson'
+      ? `<div class="empty"><p>Write down what you learned after each class — the technique, the key details, and what clicked.</p><button class="btn primary" data-new-entry>Add a lesson</button></div>`
+      : `<div class="empty"><p>Reflect on your rolls — what worked, where you got stuck, and what to focus on next time.</p><button class="btn primary" data-new-entry>Add a roll reflection</button></div>`;
+    return;
+  }
+  let html = '';
+  if (kind === 'roll' && !q) {
+    const focus = all.find(j => j.nextFocus.trim());
+    if (focus) html += `<button class="focus-card" data-entry="${focus.id}"><span class="focus-label">Current focus</span><span class="focus-text">${esc(focus.nextFocus)}</span><span class="row-sub">from ${fmtDate(focus.date)}</span></button>`;
+  }
+  let month = '';
+  for (const j of items) {
+    const m = parseDate(j.date).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    if (m !== month) { month = m; html += `<h4 class="group-head">${esc(m)}</h4>`; }
+    const preview = j.kind === 'lesson'
+      ? (j.body.trim() ? `<p class="j-preview">${esc(j.body)}</p>` : '')
+      : [j.worked.trim() ? `<p class="j-line good"><b>✓</b>${esc(j.worked)}</p>` : '', j.struggled.trim() ? `<p class="j-line bad"><b>✗</b>${esc(j.struggled)}</p>` : ''].join('');
+    const moves = j.nodeIds.map(id => S.node(id)).filter(Boolean);
+    html += `<button class="j-card" data-entry="${j.id}">
+      <div class="j-top"><span class="j-date">${fmtDate(j.date)}</span>${j.kind === 'lesson' && j.coach ? `<span class="row-sub">· ${esc(j.coach)}</span>` : ''}${j.kind === 'roll' && j.partner && j.title ? `<span class="row-sub">· ${esc(j.partner)}</span>` : ''}<span class="spacer"></span>${feelDots(j.feel)}</div>
+      <div class="j-title">${esc(entryTitle(j))}</div>
+      ${preview}
+      ${moves.length ? `<div class="chip-wrap j-moves">${moves.map(n => `<span class="mchip tiny" style="--c:${color(n.type)}">${esc(n.name)}</span>`).join('')}</div>` : ''}
+    </button>`;
+  }
+  list.innerHTML = html || `<div class="empty"><p>No entries match “${esc(ui.journalQuery)}”.</p></div>`;
+}
+
+function newEntry(kind) {
+  const j = S.addEntry(kind);
+  openEntry(j.id, true);
+}
+
+function openEntry(id, isNew) {
+  openSheet((body, sheet) => {
+    const j = S.entry(id);
+    if (!j) { sheet.close(); return; }
+    const k = JKIND[j.kind];
+    const lesson = j.kind === 'lesson';
+    body.innerHTML = `
+      <div class="sheet-head">
+        <span class="badge" style="--c:${k.color}">${k.one}</span>
+        <span class="spacer"></span><span class="saved">Saved</span>
+        <button class="icon-btn" data-act="close" aria-label="Done">${I.close}</button>
+      </div>
+      <div class="seg j-kind"><button data-kind="lesson" class="${lesson ? 'active' : ''}">Lesson</button><button data-kind="roll" class="${lesson ? '' : 'active'}">Roll reflection</button></div>
+      <div class="field-row">
+        <label class="field" style="width:150px"><span>Date</span><input class="input" type="date" data-f="date" value="${esc(j.date)}"></label>
+        <label class="field grow"><span>${lesson ? 'Coach' : 'Partner(s)'}</span><input class="input" data-f="${lesson ? 'coach' : 'partner'}" value="${esc(lesson ? j.coach : j.partner)}" placeholder="${lesson ? 'Who taught it' : 'Who you rolled with'}" autocomplete="off"></label>
+      </div>
+      <label class="field"><span>${lesson ? 'Topic' : 'Session'}</span><input class="input" data-f="title" value="${esc(j.title)}" placeholder="${lesson ? 'e.g. Knee cut pass vs. half guard' : 'e.g. Tuesday open mat'}" autocomplete="off"></label>
+      ${lesson ? `
+        <label class="field"><span>What I learned</span><textarea data-f="body" rows="7" placeholder="Key details, steps, grips, common mistakes, what clicked…">${esc(j.body)}</textarea></label>
+      ` : `
+        <div class="field"><span>How did it feel?</span><div class="feel-pick">${[1, 2, 3, 4, 5].map(i => `<button data-act="feel" data-v="${i}" class="${i <= j.feel ? 'on' : ''}" aria-label="${i} of 5">${i}</button>`).join('')}<em>${['', 'Rough', 'Meh', 'Okay', 'Good', 'Great'][j.feel] || ''}</em></div></div>
+        <label class="field"><span class="good">✓ What worked</span><textarea data-f="worked" rows="3" placeholder="Sweeps, subs, positions that landed…">${esc(j.worked)}</textarea></label>
+        <label class="field"><span class="bad">✗ Where I struggled / got caught</span><textarea data-f="struggled" rows="3" placeholder="Positions you got stuck in, what you got tapped with…">${esc(j.struggled)}</textarea></label>
+        <label class="field"><span>→ Focus for next time</span><textarea data-f="nextFocus" rows="2" placeholder="One thing to work on in your next rolls">${esc(j.nextFocus)}</textarea></label>
+      `}
+      <div class="field"><span>Moves</span><div class="chip-wrap">
+        ${j.nodeIds.map(nid => { const n = S.node(nid); return n ? `<span class="mchip removable" style="--c:${color(n.type)}"><button data-act="node" data-id="${n.id}">${esc(n.name)}</button><button class="x" data-act="unlink" data-id="${n.id}" aria-label="Unlink">×</button></span>` : ''; }).join('')}
+        <button class="mchip add" data-act="link">+ Link move</button>
+      </div></div>
+      <button class="btn primary wide" data-act="close">Done</button>
+      <button class="btn danger wide" data-act="delete">${I.trash}Delete entry</button>`;
+
+    const saved = $('.saved', body);
+    const save = () => {
+      const patch = {};
+      $$('[data-f]', body).forEach(f => { patch[f.dataset.f] = f.dataset.f === 'date' ? (f.value || S.today()) : f.value; });
+      S.updateEntry(id, patch);
+      saved.classList.add('show'); clearTimeout(save.t); save.t = setTimeout(() => saved.classList.remove('show'), 1000);
+    };
+    const saveSoon = debounce(save, 400);
+    $$('[data-f]', body).forEach(f => { f.oninput = saveSoon; f.onchange = save; });
+    if (isNew && !sheet.state.focused) { sheet.state.focused = true; setTimeout(() => $('[data-f=title]', body)?.focus(), 320); }
+
+    body.onclick = e => {
+      const kb = e.target.closest('.j-kind button');
+      if (kb) { save(); S.updateEntry(id, { kind: kb.dataset.kind }); sheet.refresh(); return; }
+      const b = e.target.closest('[data-act]');
+      if (!b) return;
+      const act = b.dataset.act;
+      if (act === 'close') { save(); sheet.close(); }
+      if (act === 'feel') { save(); const v = +b.dataset.v; S.updateEntry(id, { feel: v === j.feel ? 0 : v }); sheet.refresh(); }
+      if (act === 'node') { save(); openNode(b.dataset.id); }
+      if (act === 'unlink') { save(); S.updateEntry(id, { nodeIds: j.nodeIds.filter(x => x !== b.dataset.id) }); sheet.refresh(); }
+      if (act === 'link') {
+        save();
+        openPicker({ title: 'Link a move to this entry', exclude: new Set(j.nodeIds), onPick: nid => S.updateEntry(id, { nodeIds: [...S.entry(id).nodeIds, nid] }) });
+      }
+      if (act === 'delete') { if (confirm('Delete this journal entry?')) { S.deleteEntry(id); sheet.close(); toast('Entry deleted'); } }
+    };
+  }, {
+    onClose: () => {
+      // Throw away a brand-new entry that was never filled in.
+      const j = S.entry(id);
+      if (isNew && j && ![j.title, j.coach, j.body, j.partner, j.worked, j.struggled, j.nextFocus].some(x => x.trim()) && !j.nodeIds.length && !j.feel) S.deleteEntry(id);
+    },
+  });
+}
+
 // ---------- More ----------
 function renderMore() {
   const v = $('#view-more');
@@ -736,7 +890,7 @@ function renderMore() {
       <div class="stat"><b>${d.nodes.length}</b><span>moves</span></div>
       <div class="stat"><b>${d.edges.length}</b><span>connections</span></div>
       <div class="stat"><b>${clips}</b><span>clips</span></div>
-      <div class="stat"><b>${d.courses.length}</b><span>courses</span></div>
+      <div class="stat"><b>${d.journal.length}</b><span>journal</span></div>
     </div>
 
     ${standalone ? '' : `<section class="card">
@@ -817,7 +971,7 @@ async function exportBackup() {
 }
 
 // ---------- boot ----------
-$('#tabbar').innerHTML = ['library', 'map', 'courses', 'more']
+$('#tabbar').innerHTML = ['library', 'map', 'journal', 'courses', 'more']
   .map(v => `<button class="tab" data-view="${v}">${I[v]}<span>${VIEW_TITLES[v] === 'Mind Map' ? 'Map' : VIEW_TITLES[v]}</span></button>`).join('');
 $('#tabbar').addEventListener('click', e => { const t = e.target.closest('.tab'); if (t) { closeAllSheets(); setView(t.dataset.view); } });
 setView(VIEW_TITLES[ui.view] ? ui.view : 'library');

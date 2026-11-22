@@ -25,7 +25,7 @@ let layout = {};
 const listeners = new Set();
 
 function blank() {
-  return { version: 1, nodes: [], edges: [], courses: [] };
+  return { version: 1, nodes: [], edges: [], courses: [], journal: [] };
 }
 
 function normalize(d) {
@@ -59,7 +59,27 @@ function normalize(d) {
       nodeIds: (ch.nodeIds || []).filter(id => ids.has(id)),
     })),
   }));
+  out.journal = (d.journal || []).map(j => ({
+    id: j.id || uid(),
+    kind: j.kind === 'roll' ? 'roll' : 'lesson',
+    date: /^\d{4}-\d{2}-\d{2}$/.test(j.date || '') ? j.date : today(),
+    title: j.title || '',
+    coach: j.coach || '',
+    body: j.body || '',
+    partner: j.partner || '',
+    worked: j.worked || '',
+    struggled: j.struggled || '',
+    nextFocus: j.nextFocus || '',
+    feel: Math.max(0, Math.min(5, +j.feel || 0)),
+    nodeIds: (j.nodeIds || []).filter(id => ids.has(id)),
+    created: j.created || Date.now(),
+  }));
   return out;
+}
+
+export function today() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function load() {
@@ -111,6 +131,7 @@ export function deleteNode(id) {
   data.nodes = data.nodes.filter(n => n.id !== id);
   data.edges = data.edges.filter(e => e.from !== id && e.to !== id);
   data.courses.forEach(c => c.chapters.forEach(ch => { ch.nodeIds = ch.nodeIds.filter(x => x !== id); }));
+  data.journal.forEach(j => { j.nodeIds = j.nodeIds.filter(x => x !== id); });
   delete layout[id];
   saveLayout(layout);
   changed();
@@ -200,6 +221,28 @@ export function chaptersForNode(nodeId) {
   data.courses.forEach(c => c.chapters.forEach(ch => { if (ch.nodeIds.includes(nodeId)) out.push({ course: c, chapter: ch }); }));
   return out;
 }
+
+// ---------- journal ----------
+export const entry = id => data.journal.find(j => j.id === id);
+export function journalSorted(kind) {
+  return data.journal.filter(j => !kind || j.kind === kind)
+    .sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
+}
+export function addEntry(kind, patch = {}) {
+  const j = { id: uid(), kind, date: today(), title: '', coach: '', body: '', partner: '', worked: '', struggled: '', nextFocus: '', feel: 0, nodeIds: [], created: Date.now(), ...patch };
+  data.journal.push(j);
+  changed();
+  return j;
+}
+export function updateEntry(id, patch) {
+  const j = entry(id);
+  if (j) { Object.assign(j, patch); changed(); }
+}
+export function deleteEntry(id) {
+  data.journal = data.journal.filter(j => j.id !== id);
+  changed();
+}
+export const journalForNode = nodeId => journalSorted().filter(j => j.nodeIds.includes(nodeId));
 
 // ---------- backup ----------
 export function exportJSON() {
