@@ -9,7 +9,7 @@ A phone-first web app for organizing your Brazilian Jiu-Jitsu game. Add it to yo
   - **Web**: the whole game as a spider web. Tap a box and the moves that flow **in** light up blue, the moves that flow **out** light up orange, and everything else fades. Pinch to zoom, drag the background to pan, drag boxes to arrange them. Tap the selected box again to open its details.
   - **Flow**: a focused view with the chosen move in the middle, what flows into it above and what flows out of it below. Tap any box to follow the chain.
   - **Max**: follows every chain to the end. Everything that eventually leads into the move is shown above it and everything that can follow is shown below, as an indented tree. Each move appears once, so loops like armbar ⇄ triangle don't repeat.
-- **Move details**: flows in and out (each connection can carry a "when / how" note such as *they posture up*), notes, clips, and the course chapters that cover the move.
+- **Move details**: flows in and out (each connection has a **Why** note such as *they posture up*, shown on the map, and a **How** note for the details), notes, clips, and the course chapters that cover the move.
 - **Clips**: paste a YouTube, BJJ Fanatics, Submeta or any other link, with an optional timestamp. YouTube clips play inside the app starting at the timestamp. BJJ Fanatics and Submeta don't allow embedding, so those open in their own site or app.
 - **Journal**, in two sections:
   - **Lessons**: what you learned in class (date, school, coach, topic, notes), linked to the moves it covered.

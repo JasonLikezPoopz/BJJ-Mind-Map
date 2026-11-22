@@ -59,7 +59,7 @@ function normalize(d) {
   }));
   const ids = new Set(out.nodes.map(n => n.id));
   out.edges = (d.edges || []).filter(e => ids.has(e.from) && ids.has(e.to) && e.from !== e.to)
-    .map(e => ({ id: e.id || uid(), from: e.from, to: e.to, label: e.label || '' }));
+    .map(e => ({ id: e.id || uid(), from: e.from, to: e.to, label: e.label || '', how: e.how || '' }));
   out.courses = (d.courses || []).map(c => ({
     id: c.id || uid(),
     title: c.title || 'Untitled course',
@@ -159,14 +159,17 @@ export function deleteNode(id) {
 // ---------- edges ----------
 export const incoming = id => data.edges.filter(e => e.to === id);
 export const outgoing = id => data.edges.filter(e => e.from === id);
-export function addEdge(from, to, label = '') {
+// label = why / when it happens (shown on the map); how = how you do it.
+export function addEdge(from, to, label = '', how = '') {
   if (from === to) return null;
   const existing = data.edges.find(e => e.from === from && e.to === to);
   if (existing) {
-    if (label) { existing.label = label; changed(); }
+    if (label) existing.label = label;
+    if (how) existing.how = how;
+    if (label || how) changed();
     return existing;
   }
-  const e = { id: uid(), from, to, label };
+  const e = { id: uid(), from, to, label, how };
   data.edges.push(e);
   changed();
   return e;

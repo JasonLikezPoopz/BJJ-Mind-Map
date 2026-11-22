@@ -92,20 +92,6 @@ function closeSheet(sheet) {
 }
 function closeAllSheets() { [...stack].reverse().forEach(s => closeSheet(s)); }
 
-function actionSheet(title, actions) {
-  openSheet((body, sheet) => {
-    body.innerHTML = `<div class="action-title">${esc(title)}</div>
-      ${actions.map((a, i) => `<button class="action ${a.danger ? 'danger' : ''}" data-i="${i}">${esc(a.label)}</button>`).join('')}
-      <button class="action cancel" data-cancel>Cancel</button>`;
-    body.onclick = e => {
-      const b = e.target.closest('button');
-      if (!b) return;
-      sheet.close();
-      if (b.dataset.i != null) actions[+b.dataset.i].run();
-    };
-  }, { className: 'compact' });
-}
-
 // ---------- tabs ----------
 const VIEW_TITLES = { library: 'Library', map: 'Map', journal: 'Journal', courses: 'Courses', more: 'More' };
 function setView(v) {
@@ -264,7 +250,7 @@ function flowSection(dir, edges) {
     const other = S.node(isIn ? e.from : e.to);
     return `<div class="flow-row">
       <button class="flow-main" data-act="goto" data-id="${other.id}">${dot(other.type)}
-        <span class="row-main"><span class="row-title">${esc(other.name)}</span>${e.label ? `<span class="row-sub italic">${esc(e.label)}</span>` : ''}</span>
+        <span class="row-main"><span class="row-title">${esc(other.name)}</span>${e.label ? `<span class="row-sub italic"><b class="why-tag">Why</b> ${esc(e.label)}</span>` : ''}${e.how ? `<span class="row-sub how-line"><b class="how-tag">How</b> ${esc(e.how)}</span>` : ''}</span>
         <span class="type-mini" style="--c:${color(other.type)}">${TYPES[other.type].label}</span></button>
       <button class="icon-btn sm" data-act="edge" data-edge="${e.id}" aria-label="Connection options">${I.dots}</button>
     </div>`;
@@ -336,7 +322,7 @@ function openNode(startId) {
       if (act === 'edit') editNode(n.id);
       if (act === 'add-in') addConnection(n.id, 'in');
       if (act === 'add-out') addConnection(n.id, 'out');
-      if (act === 'edge') edgeActions(b.dataset.edge, sheet);
+      if (act === 'edge') edgeActions(b.dataset.edge);
       if (act === 'add-clip') addClip(n.id);
       if (act === 'del-clip') { if (confirm('Delete this clip?')) { S.deleteClip(n.id, b.dataset.clip); sheet.refresh(); } }
       if (act === 'play') {
@@ -353,17 +339,29 @@ function openNode(startId) {
   });
 }
 
-function edgeActions(edgeId, parentSheet) {
+function edgeActions(edgeId) {
   const e = S.db().edges.find(x => x.id === edgeId);
   if (!e) return;
   const a = S.node(e.from), b = S.node(e.to);
-  actionSheet(`${a.name} → ${b.name}`, [
-    { label: e.label ? 'Edit “when / how” note' : 'Add “when / how” note', run: () => {
-      const v = prompt('When or how does this happen?\n(e.g. "they posture up", "if they post the hand")', e.label);
-      if (v != null) { S.updateEdge(edgeId, { label: v.trim() }); parentSheet?.refresh(); }
-    } },
-    { label: 'Remove connection', danger: true, run: () => { S.deleteEdge(edgeId); parentSheet?.refresh(); toast('Connection removed'); } },
-  ]);
+  openSheet((body, sheet) => {
+    body.innerHTML = `
+      <div class="sheet-head"><h3 class="head-title">Connection</h3><span class="spacer"></span><button class="icon-btn" data-act="close" aria-label="Close">${I.close}</button></div>
+      <div class="edge-pair">${dot(a.type)}<b>${esc(a.name)}</b><span class="arrow">→</span>${dot(b.type)}<b>${esc(b.name)}</b></div>
+      <label class="field"><span>Why <em>— when does it happen? (shown on the map)</em></span>
+        <input class="input f-why" value="${esc(e.label)}" placeholder="e.g. they posture up" autocomplete="off"></label>
+      <label class="field"><span>How <em>— the details of doing it</em></span>
+        <textarea class="f-how" rows="4" placeholder="e.g. control the sleeve, hip out to the side, then swing the leg over">${esc(e.how)}</textarea></label>
+      <button class="btn primary wide" data-act="save">Save</button>
+      <button class="btn danger wide" data-act="remove">${I.trash}Remove connection</button>`;
+    setTimeout(() => $('.f-why', body).focus(), 320);
+    body.onclick = ev => {
+      const btn = ev.target.closest('[data-act]');
+      if (!btn) return;
+      if (btn.dataset.act === 'close') sheet.close();
+      if (btn.dataset.act === 'save') { S.updateEdge(edgeId, { label: $('.f-why', body).value.trim(), how: $('.f-how', body).value.trim() }); sheet.close(); toast('Saved'); }
+      if (btn.dataset.act === 'remove') { S.deleteEdge(edgeId); sheet.close(); toast('Connection removed'); }
+    };
+  }, { className: 'compact' });
 }
 
 function addConnection(nodeId, dir) {
@@ -376,8 +374,8 @@ function addConnection(nodeId, dir) {
     withLabel: true,
     allowCreate: true,
     defaultType: dir === 'out' && n.type === 'position' ? 'submission' : 'position',
-    onPick: (id, label) => {
-      if (dir === 'in') S.addEdge(id, nodeId, label); else S.addEdge(nodeId, id, label);
+    onPick: (id, label, how) => {
+      if (dir === 'in') S.addEdge(id, nodeId, label, how); else S.addEdge(nodeId, id, label, how);
       toast('Connected');
     },
   });
@@ -389,7 +387,8 @@ function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate
     body.innerHTML = `
       <div class="sheet-head"><h3 class="head-title">${esc(title)}</h3><span class="spacer"></span><button class="icon-btn" data-close>${I.close}</button></div>
       <label class="search">${I.search}<input type="search" class="pk-q" placeholder="${allowCreate ? 'Search or type a new move' : 'Search moves'}" autocomplete="off"></label>
-      ${withLabel ? `<input class="input pk-label" placeholder="When / how? (optional) — e.g. they posture up" autocomplete="off">` : ''}
+      ${withLabel ? `<input class="input pk-label" placeholder="Why? (optional) — e.g. they posture up" autocomplete="off">
+        <input class="input pk-how" placeholder="How? (optional) — e.g. grip the sleeve, hip out" autocomplete="off">` : ''}
       <div class="pk-list"></div>`;
     const q = $('.pk-q', body), list = $('.pk-list', body);
     const draw = () => {
@@ -411,11 +410,12 @@ function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate
     body.onclick = e => {
       if (e.target.closest('[data-close]')) return sheet.close();
       const label = withLabel ? $('.pk-label', body).value.trim() : '';
+      const how = withLabel ? $('.pk-how', body).value.trim() : '';
       const pick = e.target.closest('[data-pick]');
       const create = e.target.closest('[data-create]');
       // Save first, then close: closing refreshes the screen underneath, so it shows the new link right away.
-      if (pick) { onPick(pick.dataset.pick, label); sheet.close(); }
-      if (create) { const n = S.addNode({ name: q.value.trim(), type: create.dataset.create }); onPick(n.id, label); sheet.close(); }
+      if (pick) { onPick(pick.dataset.pick, label, how); sheet.close(); }
+      if (create) { const n = S.addNode({ name: q.value.trim(), type: create.dataset.create }); onPick(n.id, label, how); sheet.close(); }
     };
   }, { className: 'tall' });
 }
