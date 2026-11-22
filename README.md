@@ -15,7 +15,7 @@ A phone-first web app for organizing your Brazilian Jiu-Jitsu game. Add it to yo
   - **Rolling**: reflections after sparring, covering which school and who you rolled with, how it felt (1–5), what worked, where you struggled or got caught, and a focus for next time. Your latest focus stays pinned at the top.
   - Every move's detail screen lists the journal entries that mention it.
 - **Courses**: track instructionals, split them into chapters with timestamps, tick chapters off and link each one to the moves it teaches.
-- **Backup**: export and import a JSON file from the **More** tab.
+- **Backup to iCloud**: one tap saves a backup file to iCloud Drive through the share sheet, and the app reminds you when you have changes that are not backed up yet (daily, every 3 days, weekly, or never).
 
 ## Put it on your iPhone
 

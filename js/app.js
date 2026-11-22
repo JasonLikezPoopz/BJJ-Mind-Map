@@ -67,6 +67,7 @@ function openSheet(render, { onClose, className = '' } = {}) {
     onClose,
   };
   stack.push(sheet);
+  $('#backupBar').hidden = true;
   sheet.refresh();
   $('.sheet-backdrop', wrap).addEventListener('click', () => sheet.close());
   // swipe down on the grabber to dismiss
@@ -87,6 +88,7 @@ function closeSheet(sheet) {
   setTimeout(() => sheet.wrap.remove(), 280);
   sheet.onClose?.();
   stack[stack.length - 1]?.refresh();
+  if (!stack.length) updateBackupBar();
 }
 function closeAllSheets() { [...stack].reverse().forEach(s => closeSheet(s)); }
 
@@ -119,6 +121,7 @@ function setView(v) {
   $('#newEntry')?.addEventListener('click', () => newEntry(ui.journalKind));
   $('#newMove')?.addEventListener('click', () => editNode(null, n => { if (ui.view === 'map') { mapSelect(n.id, true); } openNode(n.id); }));
   $('#newCourse')?.addEventListener('click', () => editCourse(null));
+  if (typeof updateBackupBar === 'function' && backupReady) updateBackupBar();
   render();
 }
 function render() {
@@ -128,6 +131,7 @@ function render() {
   if (ui.view === 'journal') renderJournal();
   if (ui.view === 'more') renderMore();
 }
+S.onChange(() => { backup.markChanged(); });
 S.onChange(() => {
   if (ui.view === 'library') renderLibList();
   else if (ui.view === 'courses') renderCourses();
@@ -908,12 +912,17 @@ function renderMore() {
     </section>`}
 
     <section class="card">
-      <h3>Backup</h3>
-      <p class="hint">Everything is saved on this device only. Export a backup now and then (e.g. to iCloud Drive) — and use it to move your game to another device.</p>
+      <h3>Backup to iCloud</h3>
+      <p class="backup-status ${backup.unsaved() ? 'stale' : ''}">Last backup: <b>${ago(backup.state.backedUpAt)}</b>${backup.unsaved() ? ' · you have changes since then' : ' · up to date'}</p>
       <div class="btn-row">
-        <button class="btn" data-act="export">Export backup</button>
-        <button class="btn" data-act="import">Import backup</button>
+        <button class="btn primary" data-act="export">Back up now</button>
+        <button class="btn" data-act="import">Restore</button>
       </div>
+      <label class="field"><span>Remind me to back up</span>
+        <select class="input backup-every">
+          ${[[1, 'Every day'], [3, 'Every 3 days'], [7, 'Every week'], [0, 'Never']].map(([v, l]) => `<option value="${v}" ${backup.state.every === v ? 'selected' : ''}>${l}</option>`).join('')}
+        </select></label>
+      <p class="hint">Tap <b>Back up now</b> → <b>Save to Files</b> → <b>iCloud Drive</b> and pick a folder (e.g. “BJJ”). Your iPhone remembers the folder, so after the first time it’s two taps. To restore, tap <b>Restore</b> and pick the newest file from iCloud Drive.</p>
       <input type="file" accept="application/json,.json" hidden class="import-file">
     </section>
 
@@ -932,6 +941,7 @@ function renderMore() {
     </section>
     <p class="footer-note">BJJ Mind Map · your data never leaves your phone.</p>
   </div>`;
+  $('.backup-every', v).onchange = e => { backup.state.every = +e.target.value; backup.save(); updateBackupBar(); };
   const file = $('.import-file', v);
   file.onchange = async () => {
     const f = file.files[0];
@@ -940,6 +950,7 @@ function renderMore() {
       const text = await f.text();
       if (!confirm('Replace everything in the app with this backup?')) return;
       S.importJSON(text);
+      backup.markBackedUp();
       graph && graph.rebuild({ fit: true });
       toast('Backup imported');
     } catch (err) { alert('Could not import: ' + err.message); }
@@ -958,14 +969,63 @@ function renderMore() {
   };
 }
 
+// ---------- backup reminders ----------
+// A home-screen web app can't write to iCloud Drive on its own, so the app keeps track of unsaved changes and
+// nudges you to save a backup. One tap opens the share sheet → "Save to Files" → iCloud Drive (iOS remembers the folder).
+const BACKUP_KEY = 'bjj-mind-map:backup';
+var backupReady = true;
+const backup = {
+  state: (() => { try { return { every: 3, ...JSON.parse(localStorage.getItem(BACKUP_KEY)) }; } catch { return { every: 3 }; } })(),
+  save() { try { localStorage.setItem(BACKUP_KEY, JSON.stringify(this.state)); } catch {} },
+  markChanged() { this.state.changedAt = Date.now(); this.save(); },
+  markBackedUp() { this.state.backedUpAt = Date.now(); this.state.snoozeUntil = 0; this.save(); updateBackupBar(); },
+  unsaved() { return !!this.state.changedAt && (!this.state.backedUpAt || this.state.changedAt > this.state.backedUpAt); },
+  due() {
+    const s = this.state;
+    if (!s.every || !this.unsaved() || Date.now() < (s.snoozeUntil || 0)) return false;
+    const since = s.backedUpAt || s.firstChangeAt || s.changedAt;
+    return Date.now() - since >= s.every * 86400000;
+  },
+};
+if (backup.state.changedAt && !backup.state.firstChangeAt) { backup.state.firstChangeAt = backup.state.changedAt; backup.save(); }
+S.onChange(() => { if (!backup.state.firstChangeAt) { backup.state.firstChangeAt = Date.now(); backup.save(); } });
+
+function ago(t) {
+  if (!t) return 'never';
+  const d = Math.floor((Date.now() - t) / 86400000);
+  if (d <= 0) return 'today';
+  return d === 1 ? 'yesterday' : `${d} days ago`;
+}
+
+function updateBackupBar() {
+  const bar = $('#backupBar');
+  if (!backup.due() || stack.length || ui.view === 'map' || ui.view === 'more') { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.innerHTML = `<div class="bb-text"><b>Back up to iCloud</b><span>Last backup: ${ago(backup.state.backedUpAt)}</span></div>
+    <button class="btn sm primary" data-bb="now">Back up</button>
+    <button class="icon-btn sm" data-bb="later" aria-label="Remind me tomorrow">${I.close}</button>`;
+}
+$('#backupBar').addEventListener('click', e => {
+  const b = e.target.closest('[data-bb]');
+  if (!b) return;
+  if (b.dataset.bb === 'now') exportBackup();
+  else { backup.state.snoozeUntil = Date.now() + 86400000; backup.save(); updateBackupBar(); toast('I’ll remind you tomorrow'); }
+});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') updateBackupBar(); });
+
 async function exportBackup() {
   const json = S.exportJSON();
   const name = `bjj-mind-map-${new Date().toISOString().slice(0, 10)}.json`;
   const fileObj = new File([json], name, { type: 'application/json' });
   if (navigator.canShare?.({ files: [fileObj] })) {
-    try { await navigator.share({ files: [fileObj], title: 'BJJ Mind Map backup' }); return; }
-    catch (err) { if (err.name === 'AbortError') return; }
+    try {
+      await navigator.share({ files: [fileObj], title: 'BJJ Mind Map backup' });
+      backup.markBackedUp(); toast('Backup saved'); if (ui.view === 'more') renderMore();
+      return;
+    } catch (err) { if (err.name === 'AbortError') return; }
   }
+  backup.markBackedUp();
+  if (ui.view === 'more') renderMore();
   const a = document.createElement('a');
   a.href = URL.createObjectURL(fileObj);
   a.download = name;
@@ -996,3 +1056,7 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     }).catch(() => {});
   });
 }
+
+// Ask iOS to keep this app's storage instead of clearing it when space runs low.
+navigator.storage?.persist?.().catch(() => {});
+updateBackupBar();
