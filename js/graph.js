@@ -173,7 +173,7 @@ export class GraphView {
   setMode(mode) { this.mode = mode; this.rebuild({ fit: true }); }
   select(id, { center = false } = {}) {
     this.selected = id;
-    if (this.mode === 'flow') this.rebuild({ fit: true });
+    if (this.mode !== 'web') this.rebuild({ fit: true });
     else { this.applyHighlight(); if (center && id) this.centerOn(id); }
   }
   relayout() {
@@ -195,7 +195,9 @@ export class GraphView {
     this.webPos = forceLayout(nodes, edges, this.getLayout(), this.aspect());
     this.saveLayout(this.webPos);
 
-    const scene = this.mode === 'flow' ? this.flowScene(byId, edges) : this.webScene(nodes, edges);
+    const scene = this.mode === 'flow' ? this.flowScene(byId, edges)
+      : this.mode === 'max' ? this.maxScene(byId, edges)
+      : this.webScene(nodes, edges);
     this.renderScene(scene, byId, animate);
     this.applyHighlight();
     if (fit) this.fit(scene.nodes);
@@ -208,6 +210,72 @@ export class GraphView {
       edges: edges.map(e => ({ from: e.from, to: e.to, kind: 'web', curve: pairs.has(e.to + '>' + e.from) })),
       headers: [],
     };
+  }
+
+  // "Flow Max": every chain into and out of the selected move, all the way to the end.
+  // Each move appears once, at its shortest distance, so loops (armbar ⇄ triangle) don't repeat forever.
+  // Laid out as indented trees: what leads here above the move, what follows below it.
+  maxScene(byId, edges) {
+    const c = this.selected;
+    this.chainCounts = { up: 0, down: 0 };
+    if (!c) return { nodes: [], edges: [], headers: [], empty: true };
+    const outAdj = new Map(), inAdj = new Map();
+    const push = (m, k, e) => { if (!m.has(k)) m.set(k, []); m.get(k).push(e); };
+    edges.forEach(e => { push(outAdj, e.from, e); push(inAdj, e.to, e); });
+    const order = (list, key) => list.slice().sort((a, b) => {
+      const A = byId.get(a[key]), B = byId.get(b[key]);
+      return A.type.localeCompare(B.type) || A.name.localeCompare(B.name);
+    });
+    const tree = (adj, key) => {
+      const parentEdge = new Map(), children = new Map(), seen = new Set([c]);
+      let frontier = [c];
+      while (frontier.length) {
+        const next = [];
+        for (const u of frontier) {
+          for (const e of order(adj.get(u) || [], key)) {
+            const v = e[key];
+            if (seen.has(v) || !byId.has(v)) continue;
+            seen.add(v); parentEdge.set(v, e); push(children, u, v); next.push(v);
+          }
+        }
+        frontier = next;
+      }
+      return { parentEdge, children };
+    };
+    const INDENT = 26, ROW = 58;
+    const nodes = [], sEdges = [];
+    const place = (key, id, left, y, sub, center) => {
+      const { w } = nodeSize(byId.get(id), sub, MAX_W);
+      nodes.push({ key, id, x: left + w / 2, y, sub, center });
+    };
+    place('c:' + c, c, 0, 0, '', true);
+
+    // Downstream: pre-order, children below their parent.
+    const down = tree(outAdj, 'to');
+    let y = 0, downCount = 0;
+    const walkDown = (u, depth) => {
+      for (const v of down.children.get(u) || []) {
+        y += ROW; downCount++;
+        place('out:' + v, v, depth * INDENT, y, down.parentEdge.get(v).label);
+        sEdges.push({ from: u === c ? 'c:' + c : 'out:' + u, to: 'out:' + v, kind: 'out', route: 'tree-out' });
+        walkDown(v, depth + 1);
+      }
+    };
+    walkDown(c, 1);
+
+    // Upstream: post-order, so each move sits just above the move it leads into.
+    const up = tree(inAdj, 'from');
+    const upList = [];
+    const walkUp = (u, depth) => {
+      for (const v of up.children.get(u) || []) { walkUp(v, depth + 1); upList.push({ v, u, depth }); }
+    };
+    walkUp(c, 1);
+    upList.forEach(({ v, u, depth }, i) => {
+      place('in:' + v, v, depth * INDENT, -(upList.length - i) * ROW, up.parentEdge.get(v).label);
+      sEdges.push({ from: 'in:' + v, to: u === c ? 'c:' + c : 'in:' + u, kind: 'in', route: 'tree-in' });
+    });
+    this.chainCounts = { up: upList.length, down: downCount };
+    return { nodes, edges: sEdges, headers: [] };
   }
 
   flowScene(byId, edges) {
@@ -271,7 +339,7 @@ export class GraphView {
         item = { x: item.x, y: item.y, _reuse: true };
       }
       if (!item || item._reuse) {
-        const start = item?._reuse ? item : (prevById.get(sn.id) || (this.mode === 'flow' ? { x: 0, y: 0 } : sn));
+        const start = item?._reuse ? item : (prevById.get(sn.id) || (this.mode !== 'web' ? { x: 0, y: 0 } : sn));
         item = this.makeNode(n, sn, start);
         this.els.set(sn.key, item);
       }
@@ -326,7 +394,13 @@ export class GraphView {
       const a = this.els.get(e.from), b = this.els.get(e.to);
       if (!a || !b) continue;
       let d;
-      if (e.route === 'out') {
+      if (e.route === 'tree-out') {
+        const rail = a.x - a.w / 2 + 14;
+        d = roundedPath([[rail, a.y + a.h / 2], [rail, b.y], [b.x - b.w / 2 - 3, b.y]]);
+      } else if (e.route === 'tree-in') {
+        const rail = b.x - b.w / 2 + 14;
+        d = roundedPath([[a.x - a.w / 2, a.y], [rail, a.y], [rail, b.y - b.h / 2 - 3]]);
+      } else if (e.route === 'out') {
         const rail = b.x - b.w / 2 - 11;
         d = roundedPath([[a.x, a.y + a.h / 2], [a.x, e.bar], [rail, e.bar], [rail, b.y], [b.x - b.w / 2 - 3, b.y]]);
       } else if (e.route === 'in') {
@@ -354,7 +428,7 @@ export class GraphView {
 
   applyHighlight() {
     const s = this.selected;
-    if (this.mode === 'flow') {
+    if (this.mode !== 'web') {
       for (const item of this.els.values()) item.g.classList.remove('dim', 'in', 'out', 'sel');
       for (const e of this.edgeEls) e.path.setAttribute('class', `edge ${e.kind}`);
       for (const [key, item] of this.els) {
@@ -402,11 +476,13 @@ export class GraphView {
       y0 = Math.min(y0, p.y - item.h / 2); y1 = Math.max(y1, p.y + item.h / 2);
     }
     const pad = 16;
-    if (this.mode === 'flow') {
-      y0 -= 20; // header pill
+    if (this.mode !== 'web') {
+      if (this.mode === 'flow') y0 -= 20; // header pill
       // Fit the width so text stays readable; scroll/pan vertically if it's tall.
       this.scale = Math.max(0.6, Math.min(1.15, (W - pad * 2) / (x1 - x0), (H - pad * 2) / (y1 - y0)));
       this.tx = W / 2 - ((x0 + x1) / 2) * this.scale;
+      // Too wide (deep chains): line up the left edge instead of centering.
+      if ((x1 - x0) * this.scale > W - pad * 2) this.tx = pad - x0 * this.scale;
       if ((y1 - y0) * this.scale <= H - pad * 2) {
         this.ty = this.topInset + H / 2 - ((y0 + y1) / 2) * this.scale;
       } else {
@@ -507,7 +583,7 @@ export class GraphView {
       if (!d.id) { if (this.mode === 'web' && this.selected) { this.selected = null; this.applyHighlight(); this.onSelect(null); } return; }
       if (d.id === this.selected) { this.onOpen(d.id); return; }
       this.selected = d.id;
-      if (this.mode === 'flow') this.rebuild({ fit: true }); else this.applyHighlight();
+      if (this.mode !== 'web') this.rebuild({ fit: true }); else this.applyHighlight();
       this.onSelect(d.id);
     };
     svg.addEventListener('pointerup', end);

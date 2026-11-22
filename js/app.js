@@ -298,8 +298,9 @@ function openNode(startId) {
       <h2 class="sheet-title">${esc(n.name)}</h2>
       ${n.tags.length ? `<div class="tags">${n.tags.map(x => `<span class="tag">#${esc(x)}</span>`).join('')}</div>` : ''}
       <div class="btn-row">
-        <button class="btn" data-act="web">${I.map}Show in web</button>
-        <button class="btn" data-act="flow">${I.shuffle}Flow view</button>
+        <button class="btn nowrap" data-act="web">${I.map}Web</button>
+        <button class="btn nowrap" data-act="flow">Flow</button>
+        <button class="btn nowrap" data-act="max">Flow Max</button>
       </div>
       ${flowSection('in', S.incoming(n.id))}
       ${flowSection('out', S.outgoing(n.id))}
@@ -344,7 +345,7 @@ function openNode(startId) {
       }
       if (act === 'course') openCourse(b.dataset.course);
       if (act === 'entry') openEntry(b.dataset.entry);
-      if (act === 'web' || act === 'flow') { closeAllSheets(); showOnMap(n.id, act); }
+      if (act === 'web' || act === 'flow' || act === 'max') { closeAllSheets(); showOnMap(n.id, act); }
       if (act === 'delete') {
         if (confirm(`Delete “${n.name}” and all of its connections?`)) { S.deleteNode(n.id); if (st.history.length) { st.id = st.history.pop(); sheet.refresh(); } else sheet.close(); toast('Move deleted'); }
       }
@@ -497,7 +498,7 @@ function renderMap() {
       <div class="map-wrap">
         <div id="graphHost"></div>
         <div class="map-toolbar">
-          <div class="seg glass" id="mapMode"><button data-mode="web">Web</button><button data-mode="flow">Flow</button></div>
+          <div class="seg glass" id="mapMode"><button data-mode="web">Web</button><button data-mode="flow">Flow</button><button data-mode="max">Max</button></div>
           <span class="spacer"></span>
           <button class="icon-btn glass" id="mapFind" aria-label="Find move">${I.search}</button>
           <button class="icon-btn glass" id="mapFit" aria-label="Fit to screen">${I.fit}</button>
@@ -525,6 +526,7 @@ function renderMap() {
       if (!b) return;
       if (b.dataset.act === 'open') openNode(graph.selected);
       if (b.dataset.act === 'flow') setMapMode('flow');
+      if (b.dataset.act === 'max') setMapMode('max');
       if (b.dataset.act === 'web') setMapMode('web');
       if (b.dataset.act === 'clear') clearMapSelection();
     };
@@ -539,7 +541,7 @@ function renderMap() {
 
 function setMapMode(mode) {
   ui.mapMode = mode; savePrefs();
-  if (mode === 'flow' && !graph.selected) {
+  if (mode !== 'web' && !graph.selected) {
     const first = S.db().nodes.find(n => isPlace(n.type)) || S.db().nodes[0];
     graph.selected = first?.id || null;
     ui.mapSelected = graph.selected;
@@ -554,7 +556,7 @@ function setMapMode(mode) {
 function clearMapSelection() {
   ui.mapSelected = null; savePrefs();
   graph.selected = null;
-  if (ui.mapMode === 'flow') { ui.mapMode = 'web'; savePrefs(); graph.setMode('web'); $$('#mapMode button').forEach(b => b.classList.toggle('active', b.dataset.mode === 'web')); }
+  if (ui.mapMode !== 'web') { ui.mapMode = 'web'; savePrefs(); graph.setMode('web'); $$('#mapMode button').forEach(b => b.classList.toggle('active', b.dataset.mode === 'web')); }
   else { graph.applyHighlight(); graph.fit(graph.scene?.nodes); }
   updateMapCard();
 }
@@ -591,13 +593,15 @@ function updateMapCard() {
   card.innerHTML = `
     ${dot(n.type)}
     <div class="mc-main"><div class="mc-name">${esc(n.name)}</div>
-      <div class="mc-sub"><span class="in-txt">${ins} in</span> · <span class="out-txt">${outs} out</span>${ui.mapMode === 'flow' ? ' · tap a box to follow' : ''}</div></div>
-    ${ui.mapMode === 'web' ? `<button class="btn sm" data-act="flow">Flow</button>` : `<button class="btn sm" data-act="web">Web</button>`}
+      <div class="mc-sub">${ui.mapMode === 'max'
+        ? `<span class="in-txt">↑ ${graph.chainCounts?.up || 0}</span> · <span class="out-txt">↓ ${graph.chainCounts?.down || 0}</span>`
+        : `<span class="in-txt">${ins} in</span> · <span class="out-txt">${outs} out</span>`}</div></div>
+    ${['web', 'flow', 'max'].filter(m => m !== ui.mapMode).map(m => `<button class="btn sm" data-act="${m}">${{ web: 'Web', flow: 'Flow', max: 'Max' }[m]}</button>`).join('')}
     <button class="btn sm primary" data-act="open">Details</button>
     <button class="icon-btn sm" data-act="clear" aria-label="Show everything">${I.close}</button>`;
 }
 
-window.addEventListener('resize', debounce(() => { if (graph && ui.view === 'map') graph.rebuild({ fit: ui.mapMode === 'flow', animate: false }); }, 200));
+window.addEventListener('resize', debounce(() => { if (graph && ui.view === 'map') graph.rebuild({ fit: ui.mapMode !== 'web', animate: false }); }, 200));
 
 // ---------- Courses ----------
 function courseStats(c) {
