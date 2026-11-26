@@ -7,6 +7,7 @@ const LAYOUT_KEY = 'bjj-mind-map:layout:v1';
 export const TYPES = {
   position:   { label: 'Position',   plural: 'Positions',   color: '#8b9cff' },
   guard:      { label: 'Guard',      plural: 'Guards',      color: '#c084fc' },
+  grip:       { label: 'Grip',       plural: 'Grips',       color: '#d4a373' },
   submission: { label: 'Submission', plural: 'Submissions', color: '#ff6b6b' },
   sweep:      { label: 'Sweep',      plural: 'Sweeps',      color: '#3ddc97' },
   pass:       { label: 'Pass',       plural: 'Passes',      color: '#ffb84d' },

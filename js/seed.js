@@ -9,6 +9,10 @@ const N = [
   ['half-guard', 'Half Guard', 'guard'],
   ['butterfly', 'Butterfly Guard', 'guard'],
   ['dlr', 'De La Riva', 'guard'],
+  // grips
+  ['collar-sleeve', 'Collar & Sleeve', 'grip'],
+  ['seatbelt', 'Seatbelt', 'grip'],
+  ['kimura-grip', 'Kimura Grip (Figure-Four)', 'grip'],
   ['open-guard-top', 'Open Guard (Top)', 'position'],
   ['side-top', 'Side Control (Top)', 'position'],
   ['side-bottom', 'Side Control (Bottom)', 'position'],
@@ -85,6 +89,9 @@ const E = [
   ['mount-top', 'armbar'], ['mount-top', 'americana'], ['mount-top', 'arm-triangle'], ['mount-top', 'cross-collar'],
   ['mount-top', 'back', 'they turn'],
   ['back', 'rnc'], ['back', 'bow-arrow'],
+  ['closed-guard', 'collar-sleeve', 'break posture first'], ['collar-sleeve', 'cross-collar'], ['collar-sleeve', 'scissor'],
+  ['back', 'seatbelt'], ['turtle-top', 'seatbelt'], ['seatbelt', 'rnc'], ['seatbelt', 'bow-arrow', 'in the gi'],
+  ['half-guard', 'kimura-grip', 'they post a hand'], ['side-top', 'kimura-grip'], ['kimura-grip', 'kimura'], ['kimura-grip', 'back', 'they roll away'],
   ['turtle-top', 'back', 'seatbelt + hooks'],
 
   ['side-bottom', 'frame-reguard'], ['frame-reguard', 'half-guard'], ['frame-reguard', 'open-guard'],

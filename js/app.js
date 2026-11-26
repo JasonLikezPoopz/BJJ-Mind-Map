@@ -205,7 +205,7 @@ function renderLibList() {
     }
   } else {
     const byId = new Map(nodes.map(n => [n.id, n]));
-    const order = ['submission', 'sweep', 'pass', 'escape', 'takedown', 'transition', 'guard', 'position'];
+    const order = ['grip', 'submission', 'sweep', 'pass', 'escape', 'takedown', 'transition', 'guard', 'position'];
     const label = k => (k === 'position' ? 'Leads to' : k === 'guard' ? 'Guards' : TYPES[k].plural);
     // Guards first, then other positions
     const positions = nodes.filter(n => isPlace(n.type)).sort((a, b) => (a.type === 'guard' ? 0 : 1) - (b.type === 'guard' ? 0 : 1) || a.name.localeCompare(b.name));
