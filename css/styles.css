@@ -211,6 +211,18 @@ textarea { resize: vertical; min-height: 90px; line-height: 1.45; }
 .chapter.done .row-title { color: var(--muted); }
 .ch-main { flex: 1; min-width: 0; display: flex; flex-direction: column; text-align: left; padding: 4px 0; }
 
+/* ---------- variations ---------- */
+.parent-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; padding: 5px 10px 5px 8px; border-radius: 20px; background: var(--card); font-size: 13px; color: var(--muted); }
+.parent-link b { color: var(--text); }
+.parent-link .chev { width: 13px; height: 13px; }
+.parent-link .dot { width: 8px; height: 8px; }
+.variations-sec .flow-row { box-shadow: inset 3px 0 0 #d4a373; }
+.mchip.variation { border-style: dashed; }
+.mc-parent { font-weight: 500; color: var(--muted); font-size: 13px; }
+.edge.family { stroke: #d4a373; stroke-dasharray: 5 4; stroke-width: 1.6; marker-end: none; opacity: .75; }
+.edge.family.hl { opacity: 1; stroke-width: 2.2; }
+.edge.family.dim { opacity: .1; }
+
 /* ---------- paths ---------- */
 :root { --gold: #ffcc4d; }
 .new-path { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; margin-top: 8px; padding: 12px; border-radius: var(--radius); border: 1.5px dashed var(--line); color: var(--accent); font-weight: 600; }

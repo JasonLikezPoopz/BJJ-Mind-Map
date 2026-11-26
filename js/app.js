@@ -179,6 +179,10 @@ function nodeRow(n) {
   const bits = [`${ins} in`, `${outs} out`];
   if (n.clips.length) bits.push(`▶ ${n.clips.length}`);
   if (n.notes.trim()) bits.push('notes');
+  const kids = S.children(n.id).length;
+  if (kids) bits.push(`${kids} variation${kids === 1 ? '' : 's'}`);
+  const parent = n.parentId && S.node(n.parentId);
+  if (parent) bits.unshift(`of ${esc(parent.name)}`);
   return `<button class="row" data-id="${n.id}">${dot(n.type)}
     <span class="row-main"><span class="row-title">${esc(n.name)}${n.favorite ? ' <span class="fav">★</span>' : ''}</span>
     <span class="row-sub">${bits.join(' · ')}</span></span>${I.chev}</button>`;
@@ -210,8 +214,13 @@ function renderLibList() {
     // Guards first, then other positions
     const positions = nodes.filter(n => isPlace(n.type)).sort((a, b) => (a.type === 'guard' ? 0 : 1) - (b.type === 'guard' ? 0 : 1) || a.name.localeCompare(b.name));
     for (const p of positions) {
-      const outs = S.outgoing(p.id).map(e => ({ e, n: byId.get(e.to) }));
-      if (q && !matches(p, q) && !outs.some(o => matches(o.n, q))) continue;
+      const kids = S.children(p.id);
+      const kidIds = new Set(kids.map(k => k.id));
+      const outs = S.outgoing(p.id).map(e => ({ e, n: byId.get(e.to) })).filter(o => !kidIds.has(o.n.id));
+      if (q && !matches(p, q) && !outs.some(o => matches(o.n, q)) && !kids.some(k => matches(k, q))) continue;
+      const kidsHTML = kids.length ? `<div class="pos-group"><div class="pos-group-label" style="--c:${color('grip')}">Grips &amp; variations</div><div class="chip-wrap">
+          ${kids.map(k => `<button class="mchip variation ${q && matches(k, q) ? 'hit' : ''}" data-id="${k.id}" style="--c:${color(k.type)}">${esc(k.name)}</button>`).join('')}
+        </div></div>` : '';
       const groups = order.map(k => {
         const items = outs.filter(o => o.n.type === k);
         if (!items.length) return '';
@@ -222,7 +231,7 @@ function renderLibList() {
       html += `<div class="pos-card">
         <button class="pos-head" data-id="${p.id}">${dot(p.type)}<span class="row-main"><span class="row-title">${esc(p.name)}${p.favorite ? ' <span class="fav">★</span>' : ''}</span>
         <span class="row-sub">${outs.length} option${outs.length === 1 ? '' : 's'}${p.clips.length ? ` · ▶ ${p.clips.length}` : ''}</span></span>${I.chev}</button>
-        ${groups || '<p class="empty-small">No options yet.</p>'}
+        ${kidsHTML}${groups || (kidsHTML ? '' : '<p class="empty-small">No options yet.</p>')}
         <button class="link-btn" data-add-from="${p.id}">+ Add option</button>
       </div>`;
     }
@@ -284,6 +293,9 @@ function openNode(startId) {
     const chapters = S.chaptersForNode(n.id);
     const journalLinks = S.journalForNode(n.id);
     const pathLinks = S.pathsForNode(n.id);
+    const parentNode = n.parentId && S.node(n.parentId);
+    const kids = S.children(n.id);
+    const canHaveKids = isPlace(n.type);
     body.innerHTML = `
       <div class="sheet-head">
         ${st.history.length ? `<button class="icon-btn" data-act="back" aria-label="Back">${I.back}</button>` : ''}
@@ -293,6 +305,7 @@ function openNode(startId) {
         <button class="icon-btn" data-act="edit" aria-label="Edit">${I.edit}</button>
         <button class="icon-btn" data-act="close" aria-label="Close">${I.close}</button>
       </div>
+      ${parentNode ? `<button class="parent-link" data-act="goto" data-id="${parentNode.id}">${dot(parentNode.type)}<span>Variation of <b>${esc(parentNode.name)}</b></span>${I.chev}</button>` : ''}
       <h2 class="sheet-title">${esc(n.name)}</h2>
       ${n.tags.length ? `<div class="tags">${n.tags.map(x => `<span class="tag">#${esc(x)}</span>`).join('')}</div>` : ''}
       <div class="btn-row">
@@ -300,6 +313,13 @@ function openNode(startId) {
         <button class="btn nowrap" data-act="flow">Flow</button>
         <button class="btn nowrap" data-act="max">Flow Max</button>
       </div>
+      ${canHaveKids || kids.length ? `<section class="sec variations-sec">
+        <div class="sec-head"><h3>Grips &amp; variations <span class="count">${kids.length}</span></h3><button class="link-btn" data-act="add-kid">+ Add</button></div>
+        <div class="list">${kids.map(k => `<div class="flow-row">
+            <button class="flow-main" data-act="goto" data-id="${k.id}">${dot(k.type)}<span class="row-main"><span class="row-title">${esc(k.name)}</span></span><span class="type-mini" style="--c:${color(k.type)}">${TYPES[k.type].label}</span></button>
+            <button class="icon-btn sm" data-act="unparent" data-id="${k.id}" aria-label="Remove variation">${I.close}</button>
+          </div>`).join('') || `<p class="empty-small">Grips and versions of ${esc(n.name)} — e.g. collar &amp; sleeve, overhook.</p>`}</div>
+      </section>` : ''}
       ${flowSection('in', S.incoming(n.id))}
       ${flowSection('out', S.outgoing(n.id))}
       <section class="sec">
@@ -333,6 +353,8 @@ function openNode(startId) {
       if (act === 'close') sheet.close();
       if (act === 'back') { st.id = st.history.pop(); sheet.refresh(); body.scrollTop = 0; }
       if (act === 'goto') { st.history.push(st.id); st.id = b.dataset.id; sheet.refresh(); body.scrollTop = 0; }
+      if (act === 'add-kid') addVariation(n.id);
+      if (act === 'unparent') { const k = S.node(b.dataset.id); if (confirm(`Stop treating “${k.name}” as a variation of ${n.name}? The move itself is kept.`)) { S.setParent(k.id, ''); sheet.refresh(); } }
       if (act === 'fav') { S.updateNode(n.id, { favorite: !n.favorite }); sheet.refresh(); }
       if (act === 'edit') editNode(n.id);
       if (act === 'add-in') addConnection(n.id, 'in');
@@ -398,7 +420,7 @@ function addConnection(nodeId, dir) {
 }
 
 // Searchable move picker; can also create a new move inline.
-function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate = true, onPick, suggest = [], suggestLabel = 'Suggested' }) {
+function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate = true, onPick, suggest = [], suggestLabel = 'Suggested', filter = () => true, createTypes = TYPE_KEYS }) {
   openSheet((body, sheet) => {
     body.innerHTML = `
       <div class="sheet-head"><h3 class="head-title">${esc(title)}</h3><span class="spacer"></span><button class="icon-btn" data-close>${I.close}</button></div>
@@ -409,12 +431,12 @@ function openPicker({ title, exclude = new Set(), withLabel = false, allowCreate
     const q = $('.pk-q', body), list = $('.pk-list', body);
     const draw = () => {
       const query = q.value.trim();
-      const items = S.nodesSorted().filter(n => !exclude.has(n.id) && matches(n, query));
+      const items = S.nodesSorted().filter(n => !exclude.has(n.id) && filter(n) && matches(n, query));
       const exact = S.db().nodes.some(n => n.name.toLowerCase() === query.toLowerCase());
       let html = '';
       if (allowCreate && query && !exact) {
         html += `<div class="pk-create"><div class="pk-create-title">Create “${esc(query)}” as…</div><div class="chip-wrap">
-          ${TYPE_KEYS.map(k => `<button class="mchip" data-create="${k}" style="--c:${color(k)}">${TYPES[k].label}</button>`).join('')}</div></div>`;
+          ${createTypes.map(k => `<button class="mchip" data-create="${k}" style="--c:${color(k)}">${TYPES[k].label}</button>`).join('')}</div></div>`;
       }
       const rowHTML = (n, sub) => `<button class="row" data-pick="${n.id}">${dot(n.type)}<span class="row-main"><span class="row-title">${esc(n.name)}</span><span class="row-sub">${sub || TYPES[n.type].label}</span></span></button>`;
       const sugg = !query ? suggest.map(s => ({ n: S.node(s.id), why: s.why })).filter(s => s.n && !exclude.has(s.n.id)) : [];
@@ -445,26 +467,46 @@ function editNode(id, after) {
   const n = id ? S.node(id) : null;
   openSheet((body, sheet) => {
     let type = sheet.state.type ?? n?.type ?? 'position';
+    if (!('parentId' in sheet.state)) sheet.state.parentId = n?.parentId || '';
+    const parentId = sheet.state.parentId;
     body.innerHTML = `
       <div class="sheet-head"><h3 class="head-title">${n ? 'Edit move' : 'New move'}</h3><span class="spacer"></span><button class="icon-btn" data-close>${I.close}</button></div>
       <label class="field"><span>Name</span><input class="input f-name" value="${esc(n?.name || '')}" placeholder="e.g. Kimura Trap" autocomplete="off"></label>
       <div class="field"><span>Type</span><div class="chip-wrap type-pick">
         ${TYPE_KEYS.map(k => `<button class="mchip ${k === type ? 'active' : ''}" data-type="${k}" style="--c:${color(k)}">${TYPES[k].label}</button>`).join('')}
       </div></div>
+      <div class="field"><span>Variation of <em>(optional — the guard or position this is a version of)</em></span><div class="chip-wrap">
+        ${parentId && S.node(parentId) ? `<span class="mchip removable" style="--c:${color(S.node(parentId).type)}"><button data-pick-parent>${esc(S.node(parentId).name)}</button><button class="x" data-clear-parent aria-label="Clear">×</button></span>` : `<button class="mchip add" data-pick-parent>Choose guard or position</button>`}
+      </div></div>
       <label class="field"><span>Tags <em>(comma separated)</em></span><input class="input f-tags" value="${esc(n?.tags.join(', ') || '')}" placeholder="gi, no-gi, competition" autocomplete="off"></label>
       <button class="btn primary wide" data-save>${n ? 'Save' : 'Add move'}</button>`;
     const name = $('.f-name', body);
-    if (!n) setTimeout(() => name.focus(), 320);
+    // keep typed text when the sheet redraws (after choosing a parent)
+    const restore = () => { const nm = $('.f-name', body), tg = $('.f-tags', body); if (sheet.state.name != null) nm.value = sheet.state.name; if (sheet.state.tags != null) tg.value = sheet.state.tags; };
+    restore();
+    if (!n && !sheet.state.focused) { sheet.state.focused = true; setTimeout(() => name.focus(), 320); }
     body.onclick = e => {
       if (e.target.closest('[data-close]')) return sheet.close();
       const tb = e.target.closest('[data-type]');
       if (tb) { type = sheet.state.type = tb.dataset.type; $$('.type-pick .mchip', body).forEach(b => b.classList.toggle('active', b === tb)); }
+      if (e.target.closest('[data-clear-parent]')) { sheet.state.name = name.value; sheet.state.tags = $('.f-tags', body).value; sheet.state.parentId = ''; sheet.refresh(); restore(); return; }
+      if (e.target.closest('[data-pick-parent]')) {
+        sheet.state.name = name.value; sheet.state.tags = $('.f-tags', body).value;
+        openPicker({
+          title: 'Variation of which guard or position?', allowCreate: false,
+          filter: c => isPlace(c.type) && (!n || S.canParent(n.id, c.id)),
+          exclude: new Set(n ? [n.id] : []),
+          onPick: pid => { sheet.state.parentId = pid; setTimeout(() => { sheet.refresh(); restore(); }, 0); },
+        });
+        return;
+      }
       if (e.target.closest('[data-save]')) {
         const nm = name.value.trim();
         if (!nm) { name.focus(); return; }
         const tags = $('.f-tags', body).value.split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean);
         let res;
         if (n) { S.updateNode(n.id, { name: nm, type, tags }); res = S.node(n.id); } else res = S.addNode({ name: nm, type, tags });
+        if ((res.parentId || '') !== sheet.state.parentId) S.setParent(res.id, sheet.state.parentId);
         sheet.close();
         after?.(res);
       }
@@ -625,7 +667,7 @@ function updateMapCard() {
   const ins = S.incoming(n.id).length, outs = S.outgoing(n.id).length;
   card.innerHTML = `
     ${dot(n.type)}
-    <div class="mc-main"><div class="mc-name">${esc(n.name)}</div>
+    <div class="mc-main"><div class="mc-name">${esc(n.name)}${n.parentId && S.node(n.parentId) ? `<span class="mc-parent"> · of ${esc(S.node(n.parentId).name)}</span>` : ''}</div>
       <div class="mc-sub">${ui.mapMode === 'max'
         ? `<span class="in-txt">↑ ${graph.chainCounts?.up || 0}</span> · <span class="out-txt">↓ ${graph.chainCounts?.down || 0}</span>`
         : `<span class="in-txt">${ins} in</span> · <span class="out-txt">${outs} out</span>`}</div></div>
@@ -787,6 +829,26 @@ function editChapter(courseId, chId, isNew) {
       }
       if (act === 'delete') { if (confirm('Delete this chapter?')) { S.deleteChapter(courseId, chId); sheet.close(); } }
     };
+  });
+}
+
+// ---------- Variations ----------
+function addVariation(parentId) {
+  const p = S.node(parentId);
+  const kids = new Set(S.children(parentId).map(k => k.id));
+  openPicker({
+    title: `Add a grip or variation of ${p.name}`,
+    allowCreate: true,
+    createTypes: ['grip', ...TYPE_KEYS.filter(k => k !== 'grip')],
+    exclude: new Set([parentId, ...kids, ...S.ancestors(parentId)]),
+    // grips that don't belong to anything yet are suggested first
+    suggest: S.nodesSorted().filter(x => x.type === 'grip' && !x.parentId && x.id !== parentId).map(x => ({ id: x.id })),
+    suggestLabel: 'Grips without a parent',
+    onPick: id => {
+      const child = S.node(id);
+      if (child.parentId && child.parentId !== parentId && !confirm(`“${child.name}” is a variation of ${S.node(child.parentId)?.name}. Move it to ${p.name}?`)) return;
+      if (!S.setParent(id, parentId)) toast('That would create a loop');
+    },
   });
 }
 

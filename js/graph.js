@@ -199,7 +199,7 @@ export class GraphView {
   }
   relayout() {
     const { nodes, edges } = this.getData();
-    this.webPos = forceLayout(nodes, edges, {}, this.aspect());
+    this.webPos = forceLayout(nodes, this.layoutEdges(nodes, edges), {}, this.aspect());
     this.saveLayout(this.webPos);
     this.rebuild({ fit: true });
   }
@@ -213,7 +213,7 @@ export class GraphView {
     const { nodes, edges } = this.getData();
     const byId = new Map(nodes.map(n => [n.id, n]));
     if (this.selected && !byId.has(this.selected)) this.selected = null;
-    this.webPos = forceLayout(nodes, edges, this.getLayout(), this.aspect());
+    this.webPos = forceLayout(nodes, this.layoutEdges(nodes, edges), this.getLayout(), this.aspect());
     this.saveLayout(this.webPos);
 
     const scene = this.mode === 'flow' ? this.flowScene(byId, edges)
@@ -226,11 +226,18 @@ export class GraphView {
 
   webScene(nodes, edges) {
     const pairs = new Set(edges.map(e => e.from + '>' + e.to));
+    const ids = new Set(nodes.map(n => n.id));
+    const family = nodes.filter(n => n.parentId && ids.has(n.parentId)).map(n => ({ from: n.parentId, to: n.id, kind: 'web', family: true }));
     return {
       nodes: nodes.map(n => ({ key: n.id, id: n.id, ...this.webPos[n.id] })),
-      edges: edges.map(e => ({ from: e.from, to: e.to, kind: 'web', curve: pairs.has(e.to + '>' + e.from) })),
+      edges: [...family, ...edges.map(e => ({ from: e.from, to: e.to, kind: 'web', curve: pairs.has(e.to + '>' + e.from) }))],
       headers: [],
     };
+  }
+
+  // Flow edges plus parent→variation links, so variations are laid out next to their parent.
+  layoutEdges(nodes, edges) {
+    return [...edges, ...nodes.filter(n => n.parentId).map(n => ({ from: n.parentId, to: n.id }))];
   }
 
   // "Flow Max": every chain into and out of the selected move, all the way to the end.
@@ -434,7 +441,12 @@ export class GraphView {
       const a = this.els.get(e.from), b = this.els.get(e.to);
       if (!a || !b) continue;
       let d;
-      if (e.route === 'tree-out') {
+      if (e.family) {
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const [sx, sy] = boxExit(a.x, a.y, a.w / 2, a.h / 2, dx, dy);
+        const [ex, ey] = boxExit(b.x, b.y, b.w / 2, b.h / 2, -dx, -dy);
+        d = `M${sx},${sy} L${ex},${ey}`;
+      } else if (e.route === 'tree-out') {
         const rail = a.x - a.w / 2 + 14;
         d = roundedPath([[rail, a.y + a.h / 2], [rail, b.y], [b.x - b.w / 2 - 3, b.y]]);
       } else if (e.route === 'tree-in') {
@@ -482,8 +494,8 @@ export class GraphView {
     // A saved path is being shown (and no box is selected): trace it in gold, number the steps, fade the rest.
     if (!s && this.path) {
       const { steps, edges: pathEdges } = this.path;
-      for (const e of this.edgeEls) e.path.setAttribute('class', 'edge ' + (pathEdges.has(e.from + '>' + e.to) ? 'path' : 'dim'));
-      this.edgeEls.filter(e => pathEdges.has(e.from + '>' + e.to)).forEach(e => this.gEdges.appendChild(e.path));
+      for (const e of this.edgeEls) e.path.setAttribute('class', 'edge ' + (e.family ? 'family dim' : pathEdges.has(e.from + '>' + e.to) ? 'path' : 'dim'));
+      this.edgeEls.filter(e => !e.family && pathEdges.has(e.from + '>' + e.to)).forEach(e => this.gEdges.appendChild(e.path));
       for (const [key, item] of this.els) {
         const on = steps.includes(key);
         item.g.classList.remove('sel', 'in', 'out');
@@ -501,9 +513,16 @@ export class GraphView {
       return;
     }
     for (const item of this.els.values()) item.g.classList.remove('path');
-    const ins = new Set(), outs = new Set();
+    const ins = new Set(), outs = new Set(), kin = new Set();
     for (const e of this.edgeEls) {
       let cls = 'edge';
+      if (e.family) {
+        // parent ⇄ variation: keep the family visible when either one is selected
+        const near = s && (e.from === s || e.to === s);
+        if (near) kin.add(e.from === s ? e.to : e.from);
+        e.path.setAttribute('class', 'edge family' + (s && !near ? ' dim' : near ? ' hl' : ''));
+        continue;
+      }
       if (s) {
         if (e.to === s) { cls += ' in'; ins.add(e.from); }
         else if (e.from === s) { cls += ' out'; outs.add(e.to); }
@@ -518,7 +537,7 @@ export class GraphView {
       c.toggle('sel', key === s);
       c.toggle('in', !!s && ins.has(key));
       c.toggle('out', !!s && outs.has(key));
-      c.toggle('dim', !!s && key !== s && !ins.has(key) && !outs.has(key));
+      c.toggle('dim', !!s && key !== s && !ins.has(key) && !outs.has(key) && !kin.has(key));
       if (key === s) this.gNodes.appendChild(item.g);
     }
   }

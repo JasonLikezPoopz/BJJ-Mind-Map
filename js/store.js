@@ -56,9 +56,11 @@ function normalize(d) {
     notes: n.notes || '',
     clips: Array.isArray(n.clips) ? n.clips : [],
     favorite: !!n.favorite,
+    parentId: n.parentId || '',
     created: n.created || Date.now(),
   }));
   const ids = new Set(out.nodes.map(n => n.id));
+  out.nodes.forEach(n => { if (!ids.has(n.parentId) || n.parentId === n.id) n.parentId = ''; });
   out.edges = (d.edges || []).filter(e => ids.has(e.from) && ids.has(e.to) && e.from !== e.to)
     .map(e => ({ id: e.id || uid(), from: e.from, to: e.to, label: e.label || '', how: e.how || '' }));
   out.courses = (d.courses || []).map(c => ({
@@ -149,6 +151,29 @@ export function addNode({ name, type = 'position', tags = [] }) {
   changed();
   return n;
 }
+// ---------- variations (parent / child) ----------
+// A move can be a variation of a guard or position, e.g. the "Collar & Sleeve" grip is a variation of Closed Guard.
+// This is separate from flows: it says "this is a version of that position", not "this leads to that".
+export const children = id => nodesSorted().filter(n => n.parentId === id);
+export function ancestors(id) {
+  const out = [];
+  let p = node(id)?.parentId;
+  while (p && !out.includes(p)) { out.push(p); p = node(p)?.parentId; }
+  return out;
+}
+// Can `parentId` be the parent of `id`? (must be a guard/position and must not create a loop)
+export function canParent(id, parentId) {
+  const p = node(parentId);
+  return !!p && parentId !== id && ['position', 'guard'].includes(p.type) && !ancestors(parentId).includes(id);
+}
+export function setParent(id, parentId) {
+  const n = node(id);
+  if (!n || (parentId && !canParent(id, parentId))) return false;
+  n.parentId = parentId || '';
+  changed();
+  return true;
+}
+
 export function updateNode(id, patch) {
   const n = node(id);
   if (!n) return;
@@ -161,6 +186,7 @@ export function deleteNode(id) {
   data.courses.forEach(c => c.chapters.forEach(ch => { ch.nodeIds = ch.nodeIds.filter(x => x !== id); }));
   data.journal.forEach(j => { j.nodeIds = j.nodeIds.filter(x => x !== id); });
   data.paths.forEach(p => { p.steps = p.steps.filter(x => x !== id); });
+  data.nodes.forEach(n => { if (n.parentId === id) n.parentId = ''; });
   delete layout[id];
   saveLayout(layout);
   changed();

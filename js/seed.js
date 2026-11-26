@@ -89,8 +89,8 @@ const E = [
   ['mount-top', 'armbar'], ['mount-top', 'americana'], ['mount-top', 'arm-triangle'], ['mount-top', 'cross-collar'],
   ['mount-top', 'back', 'they turn'],
   ['back', 'rnc'], ['back', 'bow-arrow'],
-  ['closed-guard', 'collar-sleeve', 'break posture first'], ['collar-sleeve', 'cross-collar'], ['collar-sleeve', 'scissor'],
-  ['back', 'seatbelt'], ['turtle-top', 'seatbelt'], ['seatbelt', 'rnc'], ['seatbelt', 'bow-arrow', 'in the gi'],
+  ['collar-sleeve', 'cross-collar'], ['collar-sleeve', 'scissor'],
+  ['turtle-top', 'seatbelt'], ['seatbelt', 'rnc'], ['seatbelt', 'bow-arrow', 'in the gi'],
   ['half-guard', 'kimura-grip', 'they post a hand'], ['side-top', 'kimura-grip'], ['kimura-grip', 'kimura'], ['kimura-grip', 'back', 'they roll away'],
   ['turtle-top', 'back', 'seatbelt + hooks'],
 
@@ -104,12 +104,15 @@ function isoDaysAgo(n) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// Grips that are variations of a guard / position.
+const PARENTS = { 'collar-sleeve': 'closed-guard', seatbelt: 'back' };
+
 export function makeSeed() {
   const now = Date.now();
   return {
     version: 1,
     nodes: N.map(([id, name, type], i) => ({
-      id, name, type, tags: [], notes: '', clips: [], favorite: false, created: now + i,
+      id, name, type, tags: [], notes: '', clips: [], favorite: false, created: now + i, parentId: PARENTS[id] || '',
     })),
     edges: E.map(([from, to, label = ''], i) => ({ id: 'e' + i, from, to, label })),
     paths: [

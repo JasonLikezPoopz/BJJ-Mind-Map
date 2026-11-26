@@ -5,6 +5,7 @@ A phone-first web app for organizing your Brazilian Jiu-Jitsu game. Add it to yo
 ## Features
 
 - **Library**: every move, grouped **by type** (positions, guards, grips, submissions, sweeps, passes, escapes, takedowns, transitions) or **by position** (each guard and position shows its grips, submissions, sweeps, passes and where it leads). Search covers names, notes, tags and clip titles. You can star favorites.
+- **Grips & variations**: any move can be marked as a *variation of* a guard or position. For example, the Collar & Sleeve grip can sit under Closed Guard. Variations are listed on the parent's screen and first on its Library card, and on the map they're joined to the parent by a dashed tan line. This is separate from flows.
 - **Paths (game plans)**: save ordered sequences such as *Standing → Guard Pull → Closed Guard → Hip Bump → Mount → Armbar*. Star one as your **main plan** and it stays at the top. When you add a step, the app suggests what flows from the previous step. **Show on map** traces the path in gold with numbered steps. Find them under **Library → Paths**.
 - **Mind map**
   - **Web**: the whole game as a spider web. Tap a box and the moves that flow **in** light up blue, the moves that flow **out** light up orange, and everything else fades. Pinch to zoom, drag the background to pan, drag boxes to arrange them. Tap the selected box again to open its details.
